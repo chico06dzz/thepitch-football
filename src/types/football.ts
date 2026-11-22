@@ -8,6 +8,17 @@ export type CompetitionId =
   | 'algerian-ligue-1'
   | 'national-teams';
 
+export type NationalCupId =
+  | 'world-cup'
+  | 'afcon'
+  | 'euro'
+  | 'asian-cup'
+  | 'copa-america'
+  | 'gold-cup'
+  | 'nations-league'
+  | 'world-qualifiers'
+  | 'friendlies';
+
 export type MatchStatus = 'live' | 'upcoming' | 'finished';
 
 export interface MatchEvent {
@@ -40,6 +51,7 @@ export interface FootballMatch {
   id: string;
   espnLeagueSlug?: string;
   competitionId: Exclude<CompetitionId, 'all'>;
+  nationalCupId?: NationalCupId;
   competitionName: string;
   matchday: string;
   date: string; // ISO date e.g. '2026-11-21T18:30Z'
@@ -92,6 +104,25 @@ export interface StandingRow {
   groupName?: string;
   zone?: 'ucl' | 'uel' | 'relegation' | 'playoff';
 }
+
+export interface FifaRankingEntry {
+  rank: number;
+  previousChange: number;
+  team: string;
+  code: string;
+  logo?: string;
+  points: number;
+  confederation?: 'UEFA' | 'CONMEBOL' | 'CAF' | 'AFC' | 'CONCACAF' | 'OFC';
+}
+
+export interface FifaRankingData {
+  updatedAt: string;
+  entries: FifaRankingEntry[];
+}
+
+export type NationalCupStandingsMap = Partial<
+  Record<Exclude<NationalCupId, 'friendlies'>, StandingRow[]>
+>;
 
 export interface TopPlayerStat {
   rank: number;

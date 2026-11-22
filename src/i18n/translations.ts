@@ -1,4 +1,11 @@
-import { AppLanguage, CompetitionId, DebateTopic, MatchEvent, MatchStatus } from '../types/football';
+import {
+  AppLanguage,
+  CompetitionId,
+  DebateTopic,
+  MatchEvent,
+  MatchStatus,
+  NationalCupId,
+} from '../types/football';
 
 export interface Translations {
   documentTitle: string;
@@ -109,6 +116,7 @@ export interface Translations {
     finishedLabel: string;
     liveLabel: string;
     favClubAria: string;
+    allCupsFilter: string;
   };
   matchDetail: {
     closeAria: string;
@@ -173,6 +181,25 @@ export interface Translations {
     contribUnit: (count: number) => string;
     shortGoals: string;
     shortAssists: string;
+    tabNationalCups: string;
+    tabFifaRanking: string;
+    fifaTitle: string;
+    fifaKicker: string;
+    fifaUpdatedPrefix: string;
+    fifaSearchPlaceholder: string;
+    fifaColChange: string;
+    fifaColPoints: string;
+    fifaColConfed: string;
+    fifaConfedLeadersTitle: string;
+    fifaFavNationsTitle: string;
+    fifaLimitTop30: string;
+    fifaLimitTop100: string;
+    fifaLimitAll: string;
+    fifaAllConfeds: string;
+    fifaEmpty: string;
+    nationalCupsTitle: string;
+    nationalCupEmpty: string;
+    nationalCupLabels: Record<NationalCupId, string>;
   };
   mercato: {
     aria: string;
@@ -446,6 +473,7 @@ export const TRANSLATIONS: Record<AppLanguage, Translations> = {
       finishedLabel: 'Terminé',
       liveLabel: 'EN DIRECT',
       favClubAria: 'Club favori',
+      allCupsFilter: 'Toutes les coupes',
     },
     matchDetail: {
       closeAria: 'Fermer la fiche du match',
@@ -517,6 +545,35 @@ export const TRANSLATIONS: Record<AppLanguage, Translations> = {
       contribUnit: (count) => `${count} B+P`,
       shortGoals: 'B',
       shortAssists: 'PD',
+      tabNationalCups: 'Coupes Nationales',
+      tabFifaRanking: 'Classement FIFA',
+      fifaTitle: 'Classement Mondial FIFA (Hommes)',
+      fifaKicker: 'Classement officiel FIFA des équipes nationales',
+      fifaUpdatedPrefix: 'Mis à jour le',
+      fifaSearchPlaceholder: 'Rechercher un pays (France, Algérie, Maroc, Espagne...)',
+      fifaColChange: 'Évol.',
+      fifaColPoints: 'Points',
+      fifaColConfed: 'Conféd.',
+      fifaConfedLeadersTitle: 'Leaders par Confédération',
+      fifaFavNationsTitle: 'Sélections suivies & Maghreb',
+      fifaLimitTop30: 'Top 30',
+      fifaLimitTop100: 'Top 100',
+      fifaLimitAll: 'Toutes',
+      fifaAllConfeds: 'Toutes',
+      fifaEmpty: 'Aucune nation trouvée pour ce filtre.',
+      nationalCupsTitle: 'Coupes & Tournois Internationaux',
+      nationalCupEmpty: 'Aucun classement de groupe publié pour ce tournoi actuellement.',
+      nationalCupLabels: {
+        'world-cup': 'Coupe du Monde',
+        afcon: 'Coupe d’Afrique (CAN)',
+        euro: 'UEFA Euro',
+        'asian-cup': 'Coupe d’Asie AFC',
+        'copa-america': 'Copa América',
+        'gold-cup': 'Gold Cup',
+        'nations-league': 'Ligue des Nations',
+        'world-qualifiers': 'Éliminatoires',
+        friendlies: 'Matchs amicaux',
+      },
     },
     mercato: {
       aria: 'Mercato et transferts de joueurs',
@@ -789,6 +846,7 @@ export const TRANSLATIONS: Record<AppLanguage, Translations> = {
       finishedLabel: 'انتهت',
       liveLabel: 'مباشر',
       favClubAria: 'نادي مفضل',
+      allCupsFilter: 'كل البطولات القارية',
     },
     matchDetail: {
       closeAria: 'إغلاق بطاقة المباراة',
@@ -859,6 +917,35 @@ export const TRANSLATIONS: Record<AppLanguage, Translations> = {
       contribUnit: (count) => `${count} مساهمة`,
       shortGoals: 'أهداف',
       shortAssists: 'صناعة',
+      tabNationalCups: 'كؤوس المنتخبات',
+      tabFifaRanking: 'تصنيف الفيفا',
+      fifaTitle: 'التصنيف العالمي للفيفا (المنتخبات)',
+      fifaKicker: 'التصنيف الرسمي للاتحاد الدولي لكرة القدم',
+      fifaUpdatedPrefix: 'آخر تحديث:',
+      fifaSearchPlaceholder: 'ابحث عن منتخب (الجزائر، المغرب، فرنسا، إسبانيا...)',
+      fifaColChange: 'التغير',
+      fifaColPoints: 'النقاط',
+      fifaColConfed: 'الاتحاد',
+      fifaConfedLeadersTitle: 'متصدرو القارات',
+      fifaFavNationsTitle: 'المنتخبات المتابعة والمغاربية',
+      fifaLimitTop30: 'أفضل 30',
+      fifaLimitTop100: 'أفضل 100',
+      fifaLimitAll: 'الكل',
+      fifaAllConfeds: 'الكل',
+      fifaEmpty: 'لم يتم العثور على منتخب مطابق لهذا البحث.',
+      nationalCupsTitle: 'الكؤوس والبطولات القارية للمنتخبات',
+      nationalCupEmpty: 'لا يوجد جدول مجموعات منشور لهذه البطولة حالياً.',
+      nationalCupLabels: {
+        'world-cup': 'كأس العالم',
+        afcon: 'كأس أفريقيا (CAN)',
+        euro: 'كأس أوروبا (يورو)',
+        'asian-cup': 'كأس آسيا',
+        'copa-america': 'كوبا أمريكا',
+        'gold-cup': 'الكأس الذهبية',
+        'nations-league': 'دوري الأمم',
+        'world-qualifiers': 'التصفيات',
+        friendlies: 'مباريات ودية',
+      },
     },
     mercato: {
       aria: 'سوق الانتقالات والميركاتو',
@@ -1130,6 +1217,7 @@ export const TRANSLATIONS: Record<AppLanguage, Translations> = {
       finishedLabel: 'FT',
       liveLabel: 'LIVE',
       favClubAria: 'Favorite club',
+      allCupsFilter: 'All cups',
     },
     matchDetail: {
       closeAria: 'Close match details',
@@ -1201,6 +1289,35 @@ export const TRANSLATIONS: Record<AppLanguage, Translations> = {
       contribUnit: (count) => `${count} G+A`,
       shortGoals: 'G',
       shortAssists: 'A',
+      tabNationalCups: 'National Cups',
+      tabFifaRanking: 'FIFA Ranking',
+      fifaTitle: 'FIFA Men’s World Ranking',
+      fifaKicker: 'Official FIFA National Team World Ranking',
+      fifaUpdatedPrefix: 'Updated on',
+      fifaSearchPlaceholder: 'Search a country (France, Algeria, Morocco, Spain...)',
+      fifaColChange: 'Move',
+      fifaColPoints: 'Points',
+      fifaColConfed: 'Confed.',
+      fifaConfedLeadersTitle: 'Confederation Leaders',
+      fifaFavNationsTitle: 'Followed & North African Nations',
+      fifaLimitTop30: 'Top 30',
+      fifaLimitTop100: 'Top 100',
+      fifaLimitAll: 'All',
+      fifaAllConfeds: 'All',
+      fifaEmpty: 'No national team matches this filter.',
+      nationalCupsTitle: 'International Cups & Tournaments',
+      nationalCupEmpty: 'No group standings published for this tournament right now.',
+      nationalCupLabels: {
+        'world-cup': 'World Cup',
+        afcon: 'Africa Cup (AFCON)',
+        euro: 'UEFA Euro',
+        'asian-cup': 'AFC Asian Cup',
+        'copa-america': 'Copa América',
+        'gold-cup': 'Gold Cup',
+        'nations-league': 'Nations League',
+        'world-qualifiers': 'Qualifiers',
+        friendlies: 'Friendlies',
+      },
     },
     mercato: {
       aria: 'Transfer market and player rumors',

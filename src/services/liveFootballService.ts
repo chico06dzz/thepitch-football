@@ -1,10 +1,14 @@
 import {
   AppLanguage,
   CompetitionId,
+  FifaRankingData,
+  FifaRankingEntry,
   FootballMatch,
   GoalNotificationEvent,
   MatchDetailedStats,
   MatchEvent,
+  NationalCupId,
+  NationalCupStandingsMap,
   NewsArticle,
   StandingRow,
   TopPlayerStat,
@@ -14,8 +18,10 @@ import {
 interface LeagueSource {
   espnSlug: string;
   competitionId: Exclude<CompetitionId, 'all'>;
+  nationalCupId?: NationalCupId;
   competitionName: string;
   algerianFilterOnly?: boolean;
+  skipDateOffsets?: boolean;
 }
 
 const LEAGUE_SOURCES: LeagueSource[] = [
@@ -25,24 +31,107 @@ const LEAGUE_SOURCES: LeagueSource[] = [
   { espnSlug: 'ita.1', competitionId: 'serie-a', competitionName: 'Serie A Enilive' },
   { espnSlug: 'ger.1', competitionId: 'bundesliga', competitionName: 'Bundesliga' },
   {
-    espnSlug: 'uefa.nations',
+    espnSlug: 'fifa.world',
     competitionId: 'national-teams',
-    competitionName: 'Sélections — Ligue des Nations',
-  },
-  {
-    espnSlug: 'fifa.friendly',
-    competitionId: 'national-teams',
-    competitionName: 'Sélections — Matchs Internationaux',
-  },
-  {
-    espnSlug: 'caf.nations_qual',
-    competitionId: 'national-teams',
-    competitionName: 'Sélections — Éliminatoires CAN',
+    nationalCupId: 'world-cup',
+    competitionName: 'Sélections — Coupe du Monde FIFA',
+    skipDateOffsets: true,
   },
   {
     espnSlug: 'caf.nations',
     competitionId: 'national-teams',
-    competitionName: 'Sélections — Coupe d’Afrique des Nations',
+    nationalCupId: 'afcon',
+    competitionName: 'Sélections — Coupe d’Afrique des Nations (CAN)',
+    skipDateOffsets: true,
+  },
+  {
+    espnSlug: 'uefa.euro',
+    competitionId: 'national-teams',
+    nationalCupId: 'euro',
+    competitionName: 'Sélections — UEFA Euro',
+    skipDateOffsets: true,
+  },
+  {
+    espnSlug: 'afc.asian.cup',
+    competitionId: 'national-teams',
+    nationalCupId: 'asian-cup',
+    competitionName: 'Sélections — Coupe d’Asie AFC',
+    skipDateOffsets: true,
+  },
+  {
+    espnSlug: 'conmebol.america',
+    competitionId: 'national-teams',
+    nationalCupId: 'copa-america',
+    competitionName: 'Sélections — Copa América',
+    skipDateOffsets: true,
+  },
+  {
+    espnSlug: 'concacaf.gold',
+    competitionId: 'national-teams',
+    nationalCupId: 'gold-cup',
+    competitionName: 'Sélections — Gold Cup Concacaf',
+    skipDateOffsets: true,
+  },
+  {
+    espnSlug: 'uefa.nations',
+    competitionId: 'national-teams',
+    nationalCupId: 'nations-league',
+    competitionName: 'Sélections — Ligue des Nations UEFA',
+  },
+  {
+    espnSlug: 'concacaf.nations.league',
+    competitionId: 'national-teams',
+    nationalCupId: 'nations-league',
+    competitionName: 'Sélections — Ligue des Nations Concacaf',
+    skipDateOffsets: true,
+  },
+  {
+    espnSlug: 'caf.nations_qual',
+    competitionId: 'national-teams',
+    nationalCupId: 'world-qualifiers',
+    competitionName: 'Sélections — Éliminatoires CAN',
+    skipDateOffsets: true,
+  },
+  {
+    espnSlug: 'fifa.worldq.uefa',
+    competitionId: 'national-teams',
+    nationalCupId: 'world-qualifiers',
+    competitionName: 'Sélections — Éliminatoires Mondial (Europe)',
+    skipDateOffsets: true,
+  },
+  {
+    espnSlug: 'fifa.worldq.caf',
+    competitionId: 'national-teams',
+    nationalCupId: 'world-qualifiers',
+    competitionName: 'Sélections — Éliminatoires Mondial (Afrique)',
+    skipDateOffsets: true,
+  },
+  {
+    espnSlug: 'fifa.worldq.conmebol',
+    competitionId: 'national-teams',
+    nationalCupId: 'world-qualifiers',
+    competitionName: 'Sélections — Éliminatoires Mondial (Am. du Sud)',
+    skipDateOffsets: true,
+  },
+  {
+    espnSlug: 'fifa.worldq.afc',
+    competitionId: 'national-teams',
+    nationalCupId: 'world-qualifiers',
+    competitionName: 'Sélections — Éliminatoires Mondial (Asie)',
+    skipDateOffsets: true,
+  },
+  {
+    espnSlug: 'fifa.worldq.concacaf',
+    competitionId: 'national-teams',
+    nationalCupId: 'world-qualifiers',
+    competitionName: 'Sélections — Éliminatoires Mondial (CONCACAF)',
+    skipDateOffsets: true,
+  },
+  {
+    espnSlug: 'fifa.friendly',
+    competitionId: 'national-teams',
+    nationalCupId: 'friendlies',
+    competitionName: 'Sélections — Matchs Internationaux',
   },
   {
     espnSlug: 'caf.champions',
@@ -512,6 +601,7 @@ export function parseEspnScoreboardEvent(ev: any, source: LeagueSource): Footbal
     id: String(ev.id),
     espnLeagueSlug: source.espnSlug,
     competitionId: source.competitionId,
+    nationalCupId: source.nationalCupId,
     competitionName: source.competitionName,
     matchday:
       ev?.season?.slug === 'regular-season'
@@ -981,7 +1071,7 @@ export async function fetchAllLiveMatches(
       }),
     );
 
-    if (!source.algerianFilterOnly && includeHistoryAndSchedule !== 'compact') {
+    if (!source.algerianFilterOnly && !source.skipDateOffsets && includeHistoryAndSchedule !== 'compact') {
       requests.push(
         fetchJson<any>(
           `https://site.api.espn.com/apis/site/v2/sports/soccer/${source.espnSlug}/scoreboard?dates=${todayStr}`,
@@ -996,7 +1086,7 @@ export async function fetchAllLiveMatches(
       );
     }
 
-    if (includeHistoryAndSchedule && !source.algerianFilterOnly) {
+    if (includeHistoryAndSchedule && !source.algerianFilterOnly && !source.skipDateOffsets) {
       for (const offset of dateOffsets) {
         if (offset === 0) continue;
         if (source.competitionId === 'national-teams' && offset > 1) continue;
@@ -1243,6 +1333,301 @@ export async function fetchAllStandings(): Promise<Record<Exclude<CompetitionId,
     result['algerian-ligue-1'] = algWiki.standings;
   }
 
+  return result;
+}
+
+// ---------- National Team Cups Standings & FIFA World Ranking ----------
+
+const COUNTRY_NAME_ALIASES: Record<string, string[]> = {
+  usa: ['united states'],
+  'united states': ['usa'],
+  'korea republic': ['south korea'],
+  'south korea': ['korea republic'],
+  'ir iran': ['iran'],
+  iran: ['ir iran'],
+  "côte d'ivoire": ['ivory coast', "cote d'ivoire"],
+  'ivory coast': ["côte d'ivoire", "cote d'ivoire"],
+  'cabo verde': ['cape verde'],
+  'cape verde': ['cabo verde'],
+  türkiye: ['turkey'],
+  turkey: ['türkiye'],
+  czechia: ['czech republic'],
+  'czech republic': ['czechia'],
+  'congo dr': ['dr congo'],
+  'dr congo': ['congo dr'],
+  'china pr': ['china'],
+  china: ['china pr'],
+  'the gambia': ['gambia'],
+  gambia: ['the gambia'],
+  'republic of ireland': ['ireland'],
+  ireland: ['republic of ireland'],
+};
+
+function parseEspnStandingsGroupRows(
+  child: any,
+  groupLabel?: string,
+): { rows: StandingRow[]; logos: Record<string, string> } {
+  const rows: StandingRow[] = [];
+  const logos: Record<string, string> = {};
+  const entries = child?.standings?.entries;
+  if (!Array.isArray(entries)) return { rows, logos };
+
+  const cleanGroup = groupLabel || (child?.name ? String(child.name).replace(/^Group\s+/i, 'Groupe ') : undefined);
+
+  entries.forEach((entry: any, idx: number) => {
+    const getStat = (name: string) => {
+      const found = entry?.stats?.find((s: any) => s?.name === name);
+      return Number(found?.value ?? 0);
+    };
+    const teamName = String(entry?.team?.displayName || 'Équipe').trim();
+    const shortName = String(entry?.team?.shortDisplayName || teamName).trim();
+    const logo: string | undefined = entry?.team?.logos?.[0]?.href || entry?.team?.logo || undefined;
+    if (logo) {
+      const lower = teamName.toLowerCase();
+      logos[lower] = logo;
+      logos[shortName.toLowerCase()] = logo;
+      for (const alias of COUNTRY_NAME_ALIASES[lower] ?? []) {
+        logos[alias] = logo;
+      }
+    }
+
+    const position = getStat('rank') || idx + 1;
+    rows.push({
+      position,
+      team: teamName,
+      shortName,
+      logo,
+      played: getStat('gamesPlayed'),
+      won: getStat('wins'),
+      drawn: getStat('ties'),
+      lost: getStat('losses'),
+      goalsFor: getStat('pointsFor'),
+      goalsAgainst: getStat('pointsAgainst'),
+      goalDiff: getStat('pointDifferential'),
+      points: getStat('points'),
+      groupName: cleanGroup,
+      zone: position <= 2 ? 'ucl' : position === 3 ? 'playoff' : undefined,
+    });
+  });
+
+  return { rows, logos };
+}
+
+let cachedFifaRanking: { data: FifaRankingData; fetchedAt: number } | null = null;
+let inFlightFifaRanking: Promise<FifaRankingData> | null = null;
+
+async function fetchFifaWorldRanking(countryLogos: Record<string, string>): Promise<FifaRankingData> {
+  if (cachedFifaRanking && Date.now() - cachedFifaRanking.fetchedAt < 15 * 60 * 1000) {
+    // Enrich with any newly discovered logos
+    if (Object.keys(countryLogos).length > 0) {
+      cachedFifaRanking.data.entries.forEach((e) => {
+        if (!e.logo) {
+          const hit = countryLogos[e.team.toLowerCase()];
+          if (hit) e.logo = hit;
+        }
+      });
+    }
+    return cachedFifaRanking.data;
+  }
+  if (inFlightFifaRanking) return inFlightFifaRanking;
+
+  inFlightFifaRanking = (async (): Promise<FifaRankingData> => {
+    try {
+      const wiki = await fetchJson<any>(
+        'https://en.wikipedia.org/w/api.php?action=query&titles=Module:SportsRankings/data/FIFA_World_Rankings&prop=revisions&rvprop=content&format=json&rvslots=main&origin=*',
+        5500,
+      );
+      const page = wiki?.query?.pages ? (Object.values(wiki.query.pages)[0] as any) : null;
+      const content: string = page?.revisions?.[0]?.slots?.main?.['*'] || '';
+      if (!content) {
+        return cachedFifaRanking?.data ?? { updatedAt: '', entries: [] };
+      }
+
+      // Extract update date
+      const updMatch = content.match(
+        /data\.updated\s*=\s*\{\s*day\s*=\s*(\d+)\s*,\s*month\s*=\s*'([^']+)'\s*,\s*year\s*=\s*(\d+)/,
+      );
+      let updatedAt = '';
+      if (updMatch) {
+        const dt = new Date(`${updMatch[1]} ${updMatch[2]} ${updMatch[3]} 12:00 UTC`);
+        if (!Number.isNaN(dt.getTime())) {
+          updatedAt = dt.toISOString();
+        }
+      }
+
+      // Extract team name -> 3-letter FIFA code from data.alias
+      const codeByTeam = new Map<string, string>();
+      const aliasStart = content.indexOf('data.alias');
+      const confedStart = content.indexOf('data.confederation');
+      if (aliasStart >= 0) {
+        const aliasBlock = content.slice(
+          aliasStart,
+          confedStart > aliasStart ? confedStart : aliasStart + 9000,
+        );
+        for (const m of aliasBlock.matchAll(/\{\s*"([A-Z0-9]+)"\s*,\s*"([^"]+)"\s*\}/g)) {
+          codeByTeam.set(m[2].trim().toLowerCase(), m[1].trim());
+        }
+      }
+
+      // Extract FIFA code -> confederation from data.confederation
+      const confedByCode = new Map<
+        string,
+        'UEFA' | 'CONMEBOL' | 'CAF' | 'AFC' | 'CONCACAF' | 'OFC'
+      >();
+      if (confedStart >= 0) {
+        const regionalIdx = content.indexOf('UNAF', confedStart);
+        const confedBlock = content.slice(
+          confedStart,
+          regionalIdx > confedStart ? regionalIdx : confedStart + 5000,
+        );
+        const confeds: ('AFC' | 'CAF' | 'CONCACAF' | 'CONMEBOL' | 'OFC' | 'UEFA')[] = [
+          'AFC',
+          'CAF',
+          'CONCACAF',
+          'CONMEBOL',
+          'OFC',
+          'UEFA',
+        ];
+        for (const confed of confeds) {
+          const rx = new RegExp(`\\b${confed}\\s*=\\s*\\{([^}]+)\\}`);
+          const match = confedBlock.match(rx);
+          if (match) {
+            for (const c of match[1].matchAll(/"([A-Z]{3})"/g)) {
+              confedByCode.set(c[1], confed);
+            }
+          }
+        }
+      }
+
+      // Extract rankings rows: { "Team", rank, change, points }
+      const rankStart = content.indexOf('data.rankings');
+      const rankEnd = aliasStart > rankStart ? aliasStart : rankStart + 25000;
+      const rankBlock = rankStart >= 0 ? content.slice(rankStart, rankEnd) : '';
+
+      const entries: FifaRankingEntry[] = [];
+      for (const m of rankBlock.matchAll(
+        /\{\s*"([^"]+)"\s*,\s*(\d+)\s*,\s*(-?\d+)\s*,\s*([0-9]+(?:\.[0-9]+)?)\s*\}/g,
+      )) {
+        const team = m[1].trim();
+        const rank = Number(m[2]);
+        const previousChange = Number(m[3]);
+        const points = Number(m[4]);
+        const lower = team.toLowerCase();
+        const code =
+          codeByTeam.get(lower) ||
+          team
+            .replace(/[^A-Za-z]/g, '')
+            .slice(0, 3)
+            .toUpperCase();
+        const confederation = confedByCode.get(code);
+        let logo = countryLogos[lower];
+        if (!logo) {
+          for (const alias of COUNTRY_NAME_ALIASES[lower] ?? []) {
+            if (countryLogos[alias]) {
+              logo = countryLogos[alias];
+              break;
+            }
+          }
+        }
+
+        entries.push({
+          rank,
+          previousChange,
+          team,
+          code,
+          logo,
+          points,
+          confederation,
+        });
+      }
+
+      const data: FifaRankingData = { updatedAt, entries };
+      if (entries.length > 0) {
+        cachedFifaRanking = { data, fetchedAt: Date.now() };
+      }
+      return data;
+    } finally {
+      inFlightFifaRanking = null;
+    }
+  })();
+
+  return inFlightFifaRanking;
+}
+
+let cachedCupsResult: {
+  data: { nationalCupsStandings: NationalCupStandingsMap; fifaRanking: FifaRankingData };
+  fetchedAt: number;
+} | null = null;
+
+export async function fetchNationalCupsAndFifa(): Promise<{
+  nationalCupsStandings: NationalCupStandingsMap;
+  fifaRanking: FifaRankingData;
+}> {
+  if (
+    cachedCupsResult &&
+    Object.keys(cachedCupsResult.data.nationalCupsStandings).length > 0 &&
+    cachedCupsResult.data.fifaRanking.entries.length > 0 &&
+    Date.now() - cachedCupsResult.fetchedAt < 10 * 60 * 1000
+  ) {
+    return cachedCupsResult.data;
+  }
+
+  const cupSources: {
+    cupId: Exclude<NationalCupId, 'friendlies'>;
+    slug: string;
+    regionPrefix?: string;
+  }[] = [
+    { cupId: 'world-cup', slug: 'fifa.world' },
+    { cupId: 'afcon', slug: 'caf.nations' },
+    { cupId: 'euro', slug: 'uefa.euro' },
+    { cupId: 'asian-cup', slug: 'afc.asian.cup' },
+    { cupId: 'copa-america', slug: 'conmebol.america' },
+    { cupId: 'gold-cup', slug: 'concacaf.gold' },
+    { cupId: 'nations-league', slug: 'uefa.nations', regionPrefix: 'UEFA' },
+    { cupId: 'nations-league', slug: 'concacaf.nations.league', regionPrefix: 'CONCACAF' },
+    { cupId: 'world-qualifiers', slug: 'caf.nations_qual', regionPrefix: 'CAN Qual.' },
+    { cupId: 'world-qualifiers', slug: 'fifa.worldq.caf', regionPrefix: 'CAF' },
+    { cupId: 'world-qualifiers', slug: 'fifa.worldq.uefa', regionPrefix: 'UEFA' },
+    { cupId: 'world-qualifiers', slug: 'fifa.worldq.conmebol', regionPrefix: 'CONMEBOL' },
+    { cupId: 'world-qualifiers', slug: 'fifa.worldq.afc', regionPrefix: 'AFC' },
+  ];
+
+  const nationalCupsStandings: NationalCupStandingsMap = {};
+  const countryLogos: Record<string, string> = {};
+
+  await Promise.all(
+    cupSources.map(async ({ cupId, slug, regionPrefix }) => {
+      const data = await fetchJson<any>(
+        `https://site.api.espn.com/apis/v2/sports/soccer/${slug}/standings`,
+        7500,
+      );
+      if (!Array.isArray(data?.children) || data.children.length === 0) return;
+
+      const rows: StandingRow[] = [];
+      for (const child of data.children) {
+        const baseGroup = child?.name
+          ? String(child.name).replace(/^Group\s+/i, 'Groupe ')
+          : undefined;
+        const groupLabel =
+          regionPrefix && baseGroup ? `${regionPrefix} · ${baseGroup}` : regionPrefix || baseGroup;
+        const parsed = parseEspnStandingsGroupRows(child, groupLabel);
+        rows.push(...parsed.rows);
+        Object.assign(countryLogos, parsed.logos);
+      }
+
+      if (rows.length > 0) {
+        const existing = nationalCupsStandings[cupId] ?? [];
+        nationalCupsStandings[cupId] = [...existing, ...rows];
+      }
+    }),
+  );
+
+  const fifaRanking = await fetchFifaWorldRanking(countryLogos);
+
+  const result = { nationalCupsStandings, fifaRanking };
+  if (Object.keys(nationalCupsStandings).length > 0 && fifaRanking.entries.length > 0) {
+    cachedCupsResult = { data: result, fetchedAt: Date.now() };
+  }
   return result;
 }
 

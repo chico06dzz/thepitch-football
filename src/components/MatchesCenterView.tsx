@@ -12,6 +12,7 @@ import {
   CompetitionId,
   FavoriteFilterMode,
   FootballMatch,
+  NationalCupId,
   SupporterComment,
 } from '../types/football';
 import {
@@ -19,6 +20,18 @@ import {
   prioritizeAndFilterMatches,
 } from '../utils/favoriteClubs';
 import { TeamLogo } from './TeamLogo';
+
+const MATCH_CUP_FILTERS: NationalCupId[] = [
+  'world-cup',
+  'afcon',
+  'euro',
+  'asian-cup',
+  'copa-america',
+  'gold-cup',
+  'nations-league',
+  'world-qualifiers',
+  'friendlies',
+];
 
 interface MatchesCenterViewProps {
   matches: FootballMatch[];
@@ -49,11 +62,18 @@ export const MatchesCenterView: React.FC<MatchesCenterViewProps> = ({
 }) => {
   const { lang, t, locale, isRtl } = useLanguage();
   const [subTab, setSubTab] = useState<'live-upcoming' | 'history'>(initialSubTab);
+  const [cupFilter, setCupFilter] = useState<'all' | NationalCupId>('all');
   const [search, setSearch] = useState('');
 
   useEffect(() => {
     setSubTab(initialSubTab);
   }, [initialSubTab]);
+
+  useEffect(() => {
+    if (selectedCompetition !== 'national-teams') {
+      setCupFilter('all');
+    }
+  }, [selectedCompetition]);
 
   const { items: scopedByFavorites } = useMemo(
     () => prioritizeAndFilterMatches(matches, favoriteClubs, favoriteFilterMode),
@@ -64,6 +84,10 @@ export const MatchesCenterView: React.FC<MatchesCenterViewProps> = ({
     const q = search.trim().toLowerCase();
     return scopedByFavorites.filter((m) => {
       const compOk = selectedCompetition === 'all' || m.competitionId === selectedCompetition;
+      const cupOk =
+        selectedCompetition !== 'national-teams' ||
+        cupFilter === 'all' ||
+        m.nationalCupId === cupFilter;
       const statusOk = subTab === 'history' ? m.status === 'finished' : m.status !== 'finished';
       const searchOk =
         !q ||
@@ -71,9 +95,9 @@ export const MatchesCenterView: React.FC<MatchesCenterViewProps> = ({
         m.awayTeam.name.toLowerCase().includes(q) ||
         m.competitionName.toLowerCase().includes(q) ||
         m.stadium.toLowerCase().includes(q);
-      return compOk && statusOk && searchOk;
+      return compOk && cupOk && statusOk && searchOk;
     });
-  }, [scopedByFavorites, selectedCompetition, subTab, search]);
+  }, [scopedByFavorites, selectedCompetition, cupFilter, subTab, search]);
 
   const liveList = filteredMatches.filter((m) => m.status === 'live');
   const upcomingList = filteredMatches.filter((m) => m.status === 'upcoming');
@@ -311,6 +335,36 @@ export const MatchesCenterView: React.FC<MatchesCenterViewProps> = ({
           </div>
         </div>
       </div>
+
+      {selectedCompetition === 'national-teams' && (
+        <div className="flex flex-wrap items-center gap-1 p-1 rounded-lg bg-slate-100 dark:bg-[#111620] border border-slate-200 dark:border-white/8">
+          <button
+            type="button"
+            onClick={() => setCupFilter('all')}
+            className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+              cupFilter === 'all'
+                ? 'bg-emerald-600 text-white'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+            }`}
+          >
+            {t.matchesView.allCupsFilter}
+          </button>
+          {MATCH_CUP_FILTERS.map((cupId) => (
+            <button
+              key={cupId}
+              type="button"
+              onClick={() => setCupFilter(cupId)}
+              className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                cupFilter === cupId
+                  ? 'bg-emerald-600 text-white'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+              }`}
+            >
+              {t.standings.nationalCupLabels[cupId]}
+            </button>
+          ))}
+        </div>
+      )}
 
       {loading && matches.length === 0 ? (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">

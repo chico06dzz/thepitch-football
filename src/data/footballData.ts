@@ -47,11 +47,19 @@ export const FOLLOWABLE_TEAMS: string[] = [
   'ES Sétif',
   'CS Constantine',
   'Algeria',
+  'Morocco',
+  'Senegal',
+  'Egypt',
+  'Tunisia',
   'France',
   'Spain',
   'England',
+  'Portugal',
+  'Germany',
+  'Italy',
   'Argentina',
   'Brazil',
+  'Japan',
 ];
 
 export const EMPTY_STANDINGS: Record<Exclude<CompetitionId, 'all'>, StandingRow[]> = {
@@ -62,6 +70,22 @@ export const EMPTY_STANDINGS: Record<Exclude<CompetitionId, 'all'>, StandingRow[
   bundesliga: [],
   'algerian-ligue-1': [],
   'national-teams': [],
+};
+
+export const EMPTY_NATIONAL_CUPS_STANDINGS = {
+  'world-cup': [] as StandingRow[],
+  afcon: [] as StandingRow[],
+  euro: [] as StandingRow[],
+  'asian-cup': [] as StandingRow[],
+  'copa-america': [] as StandingRow[],
+  'gold-cup': [] as StandingRow[],
+  'nations-league': [] as StandingRow[],
+  'world-qualifiers': [] as StandingRow[],
+};
+
+export const EMPTY_FIFA_RANKING = {
+  updatedAt: '',
+  entries: [],
 };
 
 export const INITIAL_DEBATES: DebateTopic[] = [

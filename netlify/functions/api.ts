@@ -1,4 +1,6 @@
 import {
+  EMPTY_FIFA_RANKING,
+  EMPTY_NATIONAL_CUPS_STANDINGS,
   EMPTY_STANDINGS,
   INITIAL_COMMENTS,
   INITIAL_DEBATES,
@@ -10,6 +12,7 @@ import {
   fetchAllStandings,
   fetchAllTopPlayers,
   fetchMatchDetails,
+  fetchNationalCupsAndFifa,
   fetchRealNewsAndMercato,
   getLocalizedNewsAndMercato,
   getParisDayKey,
@@ -19,7 +22,9 @@ import {
   CompetitionId,
   ContactSubmission,
   DebateTopic,
+  FifaRankingData,
   FootballMatch,
+  NationalCupStandingsMap,
   NewsArticle,
   PredictionVoteCounts,
   StandingRow,
@@ -32,6 +37,8 @@ import {
 interface LiveCache {
   matches: FootballMatch[];
   standings: Record<Exclude<CompetitionId, 'all'>, StandingRow[]>;
+  nationalCupsStandings: NationalCupStandingsMap;
+  fifaRanking: FifaRankingData;
   topPlayers: TopPlayerStat[];
   news: NewsArticle[];
   transfers: TransferItem[];
@@ -53,6 +60,8 @@ const CACHE_TTL_MS = 45 * 1000;
 const liveCache: LiveCache = {
   matches: [],
   standings: { ...EMPTY_STANDINGS },
+  nationalCupsStandings: { ...EMPTY_NATIONAL_CUPS_STANDINGS },
+  fifaRanking: { ...EMPTY_FIFA_RANKING },
   topPlayers: [],
   news: [],
   transfers: [],
@@ -134,7 +143,7 @@ async function syncAllLiveData(lang: AppLanguage, force = false): Promise<void> 
 
   inFlightSync = (async () => {
     try {
-      // Wave 1: standings + top players + news & transfers (avoids socket congestion on serverless cold start)
+      // Wave 1: club standings + top players + news & transfers
       const [standings, topPlayers, newsAndTransfers] = await Promise.all([
         fetchAllStandings(),
         fetchAllTopPlayers(),
@@ -148,8 +157,17 @@ async function syncAllLiveData(lang: AppLanguage, force = false): Promise<void> 
       if (newsAndTransfers.news.length > 0) liveCache.news = newsAndTransfers.news;
       if (newsAndTransfers.transfers.length > 0) liveCache.transfers = newsAndTransfers.transfers;
 
-      // Wave 2: live, upcoming & recent matches (compact 3-day window for fast serverless response)
-      const matches = await fetchAllLiveMatches('compact');
+      // Wave 2: national cups standings & FIFA ranking + compact live/recent matches
+      const [cupsAndFifa, matches] = await Promise.all([
+        fetchNationalCupsAndFifa(),
+        fetchAllLiveMatches('compact'),
+      ]);
+      if (Object.keys(cupsAndFifa.nationalCupsStandings).length > 0) {
+        liveCache.nationalCupsStandings = cupsAndFifa.nationalCupsStandings;
+      }
+      if (cupsAndFifa.fifaRanking.entries.length > 0) {
+        liveCache.fifaRanking = cupsAndFifa.fifaRanking;
+      }
       if (matches.length > 0) liveCache.matches = matches;
 
       liveCache.lastSyncedAt = new Date().toISOString();
@@ -200,6 +218,8 @@ export default async function handler(request: Request): Promise<Response> {
       return jsonResponse({
         matches: liveCache.matches,
         standings: liveCache.standings,
+        nationalCupsStandings: liveCache.nationalCupsStandings,
+        fifaRanking: liveCache.fifaRanking,
         topPlayers: liveCache.topPlayers,
         transfers: localized.transfers.length > 0 ? localized.transfers : liveCache.transfers,
         news: localized.news.length > 0 ? localized.news : liveCache.news,
@@ -220,6 +240,8 @@ export default async function handler(request: Request): Promise<Response> {
       return jsonResponse({
         matches: liveCache.matches,
         standings: liveCache.standings,
+        nationalCupsStandings: liveCache.nationalCupsStandings,
+        fifaRanking: liveCache.fifaRanking,
         topPlayers: liveCache.topPlayers,
         transfers: localized.transfers.length > 0 ? localized.transfers : liveCache.transfers,
         news: localized.news.length > 0 ? localized.news : liveCache.news,

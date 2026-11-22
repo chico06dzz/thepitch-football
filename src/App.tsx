@@ -18,6 +18,7 @@ import { DebatesPredictionsView } from './components/DebatesPredictionsView';
 import { MatchDetailDrawer } from './components/MatchDetailDrawer';
 import { MatchesCenterView } from './components/MatchesCenterView';
 import { MercatoView } from './components/MercatoView';
+import { PitchLogoMark } from './components/PitchLogoMark';
 import { StandingsView } from './components/StandingsView';
 import { TeamLogo } from './components/TeamLogo';
 import { UserProfileDrawer } from './components/UserProfileDrawer';
@@ -29,6 +30,8 @@ import {
   getLocalizedStatusDetail,
 } from './i18n/translations';
 import {
+  EMPTY_FIFA_RANKING,
+  EMPTY_NATIONAL_CUPS_STANDINGS,
   EMPTY_STANDINGS,
   INITIAL_COMMENTS,
   INITIAL_DEBATES,
@@ -39,8 +42,10 @@ import {
   CompetitionId,
   DebateTopic,
   FavoriteFilterMode,
+  FifaRankingData,
   FootballMatch,
   GoalNotificationEvent,
+  NationalCupStandingsMap,
   NewsArticle,
   PredictionVoteCounts,
   StandingRow,
@@ -122,6 +127,9 @@ export default function App() {
   const [matches, setMatches] = useState<FootballMatch[]>([]);
   const [standingsByComp, setStandingsByComp] =
     useState<Record<Exclude<CompetitionId, 'all'>, StandingRow[]>>(EMPTY_STANDINGS);
+  const [nationalCupsStandings, setNationalCupsStandings] =
+    useState<NationalCupStandingsMap>(EMPTY_NATIONAL_CUPS_STANDINGS);
+  const [fifaRanking, setFifaRanking] = useState<FifaRankingData>(EMPTY_FIFA_RANKING);
   const [topPlayers, setTopPlayers] = useState<TopPlayerStat[]>([]);
   const [transfers, setTransfers] = useState<TransferItem[]>([]);
   const [news, setNews] = useState<NewsArticle[]>([]);
@@ -233,6 +241,8 @@ export default function App() {
         const apiData = await fetchApiJson<{
           matches?: FootballMatch[];
           standings?: Record<Exclude<CompetitionId, 'all'>, StandingRow[]>;
+          nationalCupsStandings?: NationalCupStandingsMap;
+          fifaRanking?: FifaRankingData;
           topPlayers?: TopPlayerStat[];
           transfers?: TransferItem[];
           news?: NewsArticle[];
@@ -252,6 +262,10 @@ export default function App() {
           hasLoadedOnceRef.current = true;
           if (apiData.matches) setMatches(apiData.matches);
           if (apiData.standings) setStandingsByComp(apiData.standings);
+          if (apiData.nationalCupsStandings) setNationalCupsStandings(apiData.nationalCupsStandings);
+          if (apiData.fifaRanking && apiData.fifaRanking.entries.length > 0) {
+            setFifaRanking(apiData.fifaRanking);
+          }
           if (apiData.topPlayers) setTopPlayers(apiData.topPlayers);
           if (apiData.transfers) setTransfers(apiData.transfers);
           if (apiData.news) setNews(apiData.news);
@@ -268,6 +282,10 @@ export default function App() {
         hasLoadedOnceRef.current = true;
         if (fallback.matches.length > 0) setMatches(fallback.matches);
         setStandingsByComp(fallback.standings);
+        if (Object.keys(fallback.nationalCupsStandings).length > 0) {
+          setNationalCupsStandings(fallback.nationalCupsStandings);
+        }
+        if (fallback.fifaRanking.entries.length > 0) setFifaRanking(fallback.fifaRanking);
         if (fallback.topPlayers.length > 0) setTopPlayers(fallback.topPlayers);
         if (fallback.transfers.length > 0) setTransfers(fallback.transfers);
         if (fallback.news.length > 0) setNews(fallback.news);
@@ -297,6 +315,8 @@ export default function App() {
         const apiData = await fetchApiJson<{
           matches?: FootballMatch[];
           standings?: Record<Exclude<CompetitionId, 'all'>, StandingRow[]>;
+          nationalCupsStandings?: NationalCupStandingsMap;
+          fifaRanking?: FifaRankingData;
           topPlayers?: TopPlayerStat[];
           transfers?: TransferItem[];
           news?: NewsArticle[];
@@ -320,6 +340,10 @@ export default function App() {
           setMatches(nextData.matches);
         }
         if (nextData.standings) setStandingsByComp(nextData.standings);
+        if (nextData.nationalCupsStandings) setNationalCupsStandings(nextData.nationalCupsStandings);
+        if (nextData.fifaRanking && nextData.fifaRanking.entries.length > 0) {
+          setFifaRanking(nextData.fifaRanking);
+        }
         if (nextData.topPlayers && nextData.topPlayers.length > 0) setTopPlayers(nextData.topPlayers);
         if (nextData.news && nextData.news.length > 0) setNews(nextData.news);
         if (nextData.transfers && nextData.transfers.length > 0) setTransfers(nextData.transfers);
@@ -372,12 +396,18 @@ export default function App() {
       try {
         const payload = JSON.parse((event as MessageEvent).data) as {
           standings?: Record<Exclude<CompetitionId, 'all'>, StandingRow[]>;
+          nationalCupsStandings?: NationalCupStandingsMap;
+          fifaRanking?: FifaRankingData;
           topPlayers?: TopPlayerStat[];
           news?: NewsArticle[];
           transfers?: TransferItem[];
           lastSyncedAt?: string;
         };
         if (payload.standings) setStandingsByComp(payload.standings);
+        if (payload.nationalCupsStandings) setNationalCupsStandings(payload.nationalCupsStandings);
+        if (payload.fifaRanking && payload.fifaRanking.entries.length > 0) {
+          setFifaRanking(payload.fifaRanking);
+        }
         if (payload.topPlayers) setTopPlayers(payload.topPlayers);
         if (langRef.current === 'fr') {
           if (payload.news) setNews(payload.news);
@@ -520,6 +550,8 @@ export default function App() {
       const data = await fetchApiJson<{
         matches?: FootballMatch[];
         standings?: Record<Exclude<CompetitionId, 'all'>, StandingRow[]>;
+        nationalCupsStandings?: NationalCupStandingsMap;
+        fifaRanking?: FifaRankingData;
         topPlayers?: TopPlayerStat[];
         transfers?: TransferItem[];
         news?: NewsArticle[];
@@ -529,6 +561,10 @@ export default function App() {
       if (data && ((data.matches && data.matches.length > 0) || (data.news && data.news.length > 0))) {
         if (data.matches) setMatches(data.matches);
         if (data.standings) setStandingsByComp(data.standings);
+        if (data.nationalCupsStandings) setNationalCupsStandings(data.nationalCupsStandings);
+        if (data.fifaRanking && data.fifaRanking.entries.length > 0) {
+          setFifaRanking(data.fifaRanking);
+        }
         if (data.topPlayers) setTopPlayers(data.topPlayers);
         if (data.transfers) setTransfers(data.transfers);
         if (data.news) setNews(data.news);
@@ -539,6 +575,10 @@ export default function App() {
       const fallback = await fetchClientFallbackBootstrap(lang);
       if (fallback.matches.length > 0) setMatches(fallback.matches);
       setStandingsByComp(fallback.standings);
+      if (Object.keys(fallback.nationalCupsStandings).length > 0) {
+        setNationalCupsStandings(fallback.nationalCupsStandings);
+      }
+      if (fallback.fifaRanking.entries.length > 0) setFifaRanking(fallback.fifaRanking);
       if (fallback.topPlayers.length > 0) setTopPlayers(fallback.topPlayers);
       if (fallback.transfers.length > 0) setTransfers(fallback.transfers);
       if (fallback.news.length > 0) setNews(fallback.news);
@@ -897,9 +937,10 @@ export default function App() {
           <button
             type="button"
             onClick={() => navigateTo('news')}
-            className="font-display-heading text-2xl font-bold tracking-tight uppercase text-slate-900 dark:text-white whitespace-nowrap shrink-0 cursor-pointer"
+            className="inline-flex items-center gap-2.5 font-display-heading text-2xl font-bold tracking-tight uppercase text-slate-900 dark:text-white whitespace-nowrap shrink-0 cursor-pointer"
           >
-            THE PITCH
+            <PitchLogoMark className="w-7 h-7" />
+            <span>THE PITCH</span>
           </button>
 
           <nav
@@ -1633,6 +1674,8 @@ export default function App() {
             selectedCompetition={selectedCompetition}
             onSelectCompetition={setSelectedCompetition}
             standingsByComp={standingsByComp}
+            nationalCupsStandings={nationalCupsStandings}
+            fifaRanking={fifaRanking}
             topPlayers={topPlayers}
             favoriteClubs={userProfile.favoriteClubs}
           />

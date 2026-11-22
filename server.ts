@@ -4,6 +4,8 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { createServer as createViteServer } from 'vite';
 import {
+  EMPTY_FIFA_RANKING,
+  EMPTY_NATIONAL_CUPS_STANDINGS,
   EMPTY_STANDINGS,
   INITIAL_COMMENTS,
   INITIAL_DEBATES,
@@ -16,6 +18,7 @@ import {
   fetchAllStandings,
   fetchAllTopPlayers,
   fetchMatchDetails,
+  fetchNationalCupsAndFifa,
   fetchRealNewsAndMercato,
   getLocalizedNewsAndMercato,
   getParisDayKey,
@@ -25,7 +28,9 @@ import {
   CompetitionId,
   ContactSubmission,
   DebateTopic,
+  FifaRankingData,
   FootballMatch,
+  NationalCupStandingsMap,
   NewsArticle,
   PredictionVoteCounts,
   StandingRow,
@@ -54,6 +59,8 @@ interface UserStoreData {
 interface LiveCache {
   matches: FootballMatch[];
   standings: Record<Exclude<CompetitionId, 'all'>, StandingRow[]>;
+  nationalCupsStandings: NationalCupStandingsMap;
+  fifaRanking: FifaRankingData;
   topPlayers: TopPlayerStat[];
   news: NewsArticle[];
   transfers: TransferItem[];
@@ -147,6 +154,8 @@ const userStore = loadUserStore();
 const liveCache: LiveCache = {
   matches: [],
   standings: EMPTY_STANDINGS,
+  nationalCupsStandings: EMPTY_NATIONAL_CUPS_STANDINGS,
+  fifaRanking: EMPTY_FIFA_RANKING,
   topPlayers: [],
   news: [],
   transfers: [],
@@ -219,13 +228,22 @@ async function refreshTablesAndNews(): Promise<void> {
       fetchAllTopPlayers(),
       fetchRealNewsAndMercato(),
     ]);
+    const cupsAndFifa = await fetchNationalCupsAndFifa();
     liveCache.standings = standings;
+    if (Object.keys(cupsAndFifa.nationalCupsStandings).length > 0) {
+      liveCache.nationalCupsStandings = cupsAndFifa.nationalCupsStandings;
+    }
+    if (cupsAndFifa.fifaRanking.entries.length > 0) {
+      liveCache.fifaRanking = cupsAndFifa.fifaRanking;
+    }
     liveCache.topPlayers = topPlayers;
     liveCache.news = newsAndTransfers.news;
     liveCache.transfers = newsAndTransfers.transfers;
     liveCache.lastSyncedAt = new Date().toISOString();
     broadcastSse('full_sync', {
       standings: liveCache.standings,
+      nationalCupsStandings: liveCache.nationalCupsStandings,
+      fifaRanking: liveCache.fifaRanking,
       topPlayers: liveCache.topPlayers,
       news: liveCache.news,
       transfers: liveCache.transfers,
@@ -249,13 +267,12 @@ async function createApp() {
 
   let currentDayKey = getParisDayKey();
 
-  // Warm up today's live matches + standings/news/top-players first, then hydrate full history
-  const initialWarmup = Promise.all([
-    refreshMatches(false),
-    refreshTablesAndNews(),
-  ]).then(() => {
-    void refreshMatches(true);
-  });
+  // Warm up tables/cups/news & today's live matches sequentially across 2 fast waves, then hydrate full history
+  const initialWarmup = refreshTablesAndNews()
+    .then(() => refreshMatches(false))
+    .then(() => {
+      void refreshMatches(true);
+    });
 
   // Poll live scores every 25 seconds & auto-rollover when a new day starts in Paris
   setInterval(() => {
@@ -314,6 +331,8 @@ async function createApp() {
     res.json({
       matches: liveCache.matches,
       standings: liveCache.standings,
+      nationalCupsStandings: liveCache.nationalCupsStandings,
+      fifaRanking: liveCache.fifaRanking,
       topPlayers: liveCache.topPlayers,
       transfers: localized.transfers,
       news: localized.news,
@@ -337,6 +356,8 @@ async function createApp() {
     res.json({
       matches: liveCache.matches,
       standings: liveCache.standings,
+      nationalCupsStandings: liveCache.nationalCupsStandings,
+      fifaRanking: liveCache.fifaRanking,
       topPlayers: liveCache.topPlayers,
       transfers: localized.transfers,
       news: localized.news,

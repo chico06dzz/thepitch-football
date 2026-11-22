@@ -94,6 +94,11 @@ const CLUB_ALIASES: Record<string, string[]> = {
   germany: ['germany', 'allemagne'],
   italy: ['italy', 'italie'],
   portugal: ['portugal'],
+  morocco: ['morocco', 'maroc', 'lions de l\'atlas'],
+  senegal: ['senegal', 'sénégal', 'lions de la téranga'],
+  egypt: ['egypt', 'égypte', 'egypte'],
+  tunisia: ['tunisia', 'tunisie'],
+  japan: ['japan', 'japon'],
 };
 
 function normalizeText(value: string): string {
