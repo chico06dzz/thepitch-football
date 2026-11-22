@@ -1,0 +1,6 @@
+{
+  "name": "THE PITCH",
+  "description": "Le média football intégral : actualités, scores en direct, calendrier des 5 grands championnats européens et sélections nationales, mercato, statistiques détaillées, classements, débats et pronostics.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
