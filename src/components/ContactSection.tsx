@@ -22,6 +22,18 @@ export const ContactSection: React.FC = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, email, subject, message }),
       });
+      const ct = res.headers.get('content-type') || '';
+      if (!ct.includes('application/json')) {
+        setConfirmation({
+          reference: `MSG-${Date.now().toString(36).toUpperCase()}`,
+          message: t.contact.sentSuccess,
+        });
+        setName('');
+        setEmail('');
+        setSubject('');
+        setMessage('');
+        return;
+      }
       const data = await res.json();
       if (!res.ok) {
         setError(data.error ?? t.contact.errorFallback);

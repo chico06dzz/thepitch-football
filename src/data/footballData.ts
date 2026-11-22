@@ -13,6 +13,7 @@ export const COMPETITIONS: { id: CompetitionId; name: string; shortName: string;
   { id: 'la-liga', name: 'La Liga EA Sports', shortName: 'La Liga', region: 'Espagne' },
   { id: 'serie-a', name: 'Serie A Enilive', shortName: 'Serie A', region: 'Italie' },
   { id: 'bundesliga', name: 'Bundesliga', shortName: 'Bundesliga', region: 'Allemagne' },
+  { id: 'algerian-ligue-1', name: 'Ligue 1 Mobilis (Algérie)', shortName: 'Ligue 1 DZ', region: 'Algérie' },
   { id: 'national-teams', name: 'Sélections Nationales', shortName: 'Sélections', region: 'International' },
 ];
 
@@ -38,6 +39,14 @@ export const FOLLOWABLE_TEAMS: string[] = [
   'Bayern Munich',
   'Bayer Leverkusen',
   'Borussia Dortmund',
+  'MC Alger',
+  'CR Belouizdad',
+  'JS Kabylie',
+  'USM Alger',
+  'MC Oran',
+  'ES Sétif',
+  'CS Constantine',
+  'Algeria',
   'France',
   'Spain',
   'England',
@@ -51,6 +60,7 @@ export const EMPTY_STANDINGS: Record<Exclude<CompetitionId, 'all'>, StandingRow[
   'la-liga': [],
   'serie-a': [],
   bundesliga: [],
+  'algerian-ligue-1': [],
   'national-teams': [],
 };
 

@@ -61,6 +61,22 @@ import {
   prioritizeAndFilterTransfers,
   saveUserProfile,
 } from './utils/favoriteClubs';
+import {
+  detectLiveGoalsClient,
+  fetchClientFallbackBootstrap,
+} from './services/clientFallbackService';
+
+async function fetchApiJson<T>(url: string, init?: RequestInit): Promise<T | null> {
+  try {
+    const res = await fetch(url, init);
+    if (!res.ok) return null;
+    const ct = res.headers.get('content-type') || '';
+    if (!ct.includes('application/json')) return null;
+    return (await res.json()) as T;
+  } catch {
+    return null;
+  }
+}
 
 type ActiveSection = 'news' | 'matches' | 'standings' | 'mercato' | 'debates';
 
@@ -156,7 +172,44 @@ export default function App() {
   langRef.current = lang;
   const tRef = useRef(t);
   tRef.current = t;
+  const matchesRef = useRef(matches);
+  matchesRef.current = matches;
   const hasLoadedOnceRef = useRef(false);
+
+  const handleIncomingGoal = useCallback((goal: GoalNotificationEvent, updatedMatch: FootballMatch | null) => {
+    if (updatedMatch) {
+      setMatches((prev) => prev.map((m) => (m.id === updatedMatch.id ? updatedMatch : m)));
+    }
+    const activeAlerts = alertsRef.current;
+    const shouldFilter = onlyFollowedRef.current;
+    const matchesUserAlert =
+      !shouldFilter ||
+      goal.isTest ||
+      activeAlerts.some(
+        (a) =>
+          a.goalPush &&
+          (goal.homeTeam.toLowerCase().includes(a.target.toLowerCase()) ||
+            goal.awayTeam.toLowerCase().includes(a.target.toLowerCase()) ||
+            goal.scoringTeam.toLowerCase().includes(a.target.toLowerCase()) ||
+            goal.competitionName.toLowerCase().includes(a.target.toLowerCase())),
+      );
+
+    if (matchesUserAlert) {
+      setGoalToasts((prev) => [goal, ...prev].slice(0, 3));
+      if (soundEnabledRef.current) {
+        playGoalChime();
+      }
+      if (
+        browserPushRef.current &&
+        typeof Notification !== 'undefined' &&
+        Notification.permission === 'granted'
+      ) {
+        new Notification(tRef.current.toasts.pushGoalTitle(goal.scoringTeam, goal.minute), {
+          body: `${goal.scorer} — ${goal.homeTeam} ${goal.homeScore} - ${goal.awayScore} ${goal.awayTeam}`,
+        });
+      }
+    }
+  }, []);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -168,42 +221,135 @@ export default function App() {
     localStorage.setItem('thepitch_theme', darkMode ? 'dark' : 'light');
   }, [darkMode]);
 
-  // Initial load & language-aware refresh of real live football data
+  // Initial load & language-aware refresh of real live football data (backend API with direct CORS fallback)
   useEffect(() => {
     let active = true;
     if (!hasLoadedOnceRef.current) {
       setLoadingLive(true);
     }
-    fetch(`/api/bootstrap?lang=${lang}`)
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (!active || !data) return;
+
+    const loadBootstrap = async () => {
+      try {
+        const apiData = await fetchApiJson<{
+          matches?: FootballMatch[];
+          standings?: Record<Exclude<CompetitionId, 'all'>, StandingRow[]>;
+          topPlayers?: TopPlayerStat[];
+          transfers?: TransferItem[];
+          news?: NewsArticle[];
+          debates?: DebateTopic[];
+          comments?: SupporterComment[];
+          predictions?: PredictionVoteCounts[];
+          alerts?: UserAlertRule[];
+          lastSyncedAt?: string;
+        }>(`/api/bootstrap?lang=${lang}`);
+
+        const hasApiContent =
+          apiData &&
+          ((Array.isArray(apiData.matches) && apiData.matches.length > 0) ||
+            (Array.isArray(apiData.news) && apiData.news.length > 0));
+
+        if (active && hasApiContent && apiData) {
+          hasLoadedOnceRef.current = true;
+          if (apiData.matches) setMatches(apiData.matches);
+          if (apiData.standings) setStandingsByComp(apiData.standings);
+          if (apiData.topPlayers) setTopPlayers(apiData.topPlayers);
+          if (apiData.transfers) setTransfers(apiData.transfers);
+          if (apiData.news) setNews(apiData.news);
+          if (apiData.debates) setDebates(apiData.debates);
+          if (apiData.comments) setComments(apiData.comments);
+          if (apiData.predictions) setPredictions(apiData.predictions);
+          if (apiData.alerts) setAlerts(apiData.alerts);
+          if (apiData.lastSyncedAt) setLastSyncedAt(apiData.lastSyncedAt);
+          return;
+        }
+
+        const fallback = await fetchClientFallbackBootstrap(lang);
+        if (!active) return;
         hasLoadedOnceRef.current = true;
-        if (data.matches) setMatches(data.matches);
-        if (data.standings) setStandingsByComp(data.standings);
-        if (data.topPlayers) setTopPlayers(data.topPlayers);
-        if (data.transfers) setTransfers(data.transfers);
-        if (data.news) setNews(data.news);
-        if (data.debates) setDebates(data.debates);
-        if (data.comments) setComments(data.comments);
-        if (data.predictions) setPredictions(data.predictions);
-        if (data.alerts) setAlerts(data.alerts);
-        if (data.lastSyncedAt) setLastSyncedAt(data.lastSyncedAt);
-      })
-      .catch(() => {
-        // Keep empty state gracefully
-      })
-      .finally(() => {
+        if (fallback.matches.length > 0) setMatches(fallback.matches);
+        setStandingsByComp(fallback.standings);
+        if (fallback.topPlayers.length > 0) setTopPlayers(fallback.topPlayers);
+        if (fallback.transfers.length > 0) setTransfers(fallback.transfers);
+        if (fallback.news.length > 0) setNews(fallback.news);
+        setLastSyncedAt(fallback.lastSyncedAt);
+      } catch {
+        // Keep current state gracefully
+      } finally {
         if (active) setLoadingLive(false);
-      });
+      }
+    };
+
+    void loadBootstrap();
     return () => {
       active = false;
     };
   }, [lang]);
 
-  // Real-time SSE stream for live scores & goal push notifications
+  // Real-time SSE stream for Express/Node, with automatic 35s polling failover on Netlify serverless/static
   useEffect(() => {
+    let pollTimer: number | null = null;
+    let sseOpened = false;
+    let closed = false;
+
+    const startPollingFallback = () => {
+      if (closed || pollTimer !== null) return;
+      pollTimer = window.setInterval(async () => {
+        const apiData = await fetchApiJson<{
+          matches?: FootballMatch[];
+          standings?: Record<Exclude<CompetitionId, 'all'>, StandingRow[]>;
+          topPlayers?: TopPlayerStat[];
+          transfers?: TransferItem[];
+          news?: NewsArticle[];
+          lastSyncedAt?: string;
+        }>(`/api/bootstrap?lang=${langRef.current}`);
+
+        const nextData =
+          apiData && Array.isArray(apiData.matches) && apiData.matches.length > 0
+            ? apiData
+            : await fetchClientFallbackBootstrap(langRef.current).catch(() => null);
+
+        if (!nextData || closed) return;
+        if (Array.isArray(nextData.matches) && nextData.matches.length > 0) {
+          if (matchesRef.current.length > 0) {
+            const goals = detectLiveGoalsClient(matchesRef.current, nextData.matches);
+            for (const goal of goals) {
+              const updatedMatch = nextData.matches.find((m) => m.id === goal.matchId) ?? null;
+              handleIncomingGoal(goal, updatedMatch);
+            }
+          }
+          setMatches(nextData.matches);
+        }
+        if (nextData.standings) setStandingsByComp(nextData.standings);
+        if (nextData.topPlayers && nextData.topPlayers.length > 0) setTopPlayers(nextData.topPlayers);
+        if (nextData.news && nextData.news.length > 0) setNews(nextData.news);
+        if (nextData.transfers && nextData.transfers.length > 0) setTransfers(nextData.transfers);
+        if (nextData.lastSyncedAt) setLastSyncedAt(nextData.lastSyncedAt);
+      }, 35000);
+    };
+
     const es = new EventSource('/api/events/stream');
+
+    es.addEventListener('connected', () => {
+      sseOpened = true;
+    });
+
+    es.onopen = () => {
+      sseOpened = true;
+    };
+
+    es.onerror = () => {
+      if (!sseOpened) {
+        es.close();
+        startPollingFallback();
+      }
+    };
+
+    const connectGuardTimer = window.setTimeout(() => {
+      if (!sseOpened && es.readyState !== EventSource.OPEN) {
+        es.close();
+        startPollingFallback();
+      }
+    }, 4500);
 
     es.addEventListener('sync', (event) => {
       try {
@@ -237,16 +383,13 @@ export default function App() {
           if (payload.news) setNews(payload.news);
           if (payload.transfers) setTransfers(payload.transfers);
         } else {
-          fetch(`/api/bootstrap?lang=${langRef.current}`)
-            .then((res) => (res.ok ? res.json() : null))
-            .then((data) => {
-              if (!data) return;
-              if (data.news) setNews(data.news);
-              if (data.transfers) setTransfers(data.transfers);
-            })
-            .catch(() => {
-              // Ignore background sync error
-            });
+          void fetchApiJson<{ news?: NewsArticle[]; transfers?: TransferItem[] }>(
+            `/api/bootstrap?lang=${langRef.current}`,
+          ).then((data) => {
+            if (!data) return;
+            if (data.news) setNews(data.news);
+            if (data.transfers) setTransfers(data.transfers);
+          });
         }
         if (payload.lastSyncedAt) setLastSyncedAt(payload.lastSyncedAt);
       } catch {
@@ -260,45 +403,7 @@ export default function App() {
           goal: GoalNotificationEvent;
           match: FootballMatch | null;
         };
-
-        if (payload.match) {
-          setMatches((prev) =>
-            prev.map((m) => (m.id === payload.match!.id ? payload.match! : m)),
-          );
-        }
-
-        const activeAlerts = alertsRef.current;
-        const shouldFilter = onlyFollowedRef.current;
-        const matchesUserAlert =
-          !shouldFilter ||
-          payload.goal.isTest ||
-          activeAlerts.some(
-            (a) =>
-              a.goalPush &&
-              (payload.goal.homeTeam.toLowerCase().includes(a.target.toLowerCase()) ||
-                payload.goal.awayTeam.toLowerCase().includes(a.target.toLowerCase()) ||
-                payload.goal.scoringTeam.toLowerCase().includes(a.target.toLowerCase()) ||
-                payload.goal.competitionName.toLowerCase().includes(a.target.toLowerCase())),
-          );
-
-        if (matchesUserAlert) {
-          setGoalToasts((prev) => [payload.goal, ...prev].slice(0, 3));
-          if (soundEnabledRef.current) {
-            playGoalChime();
-          }
-          if (
-            browserPushRef.current &&
-            typeof Notification !== 'undefined' &&
-            Notification.permission === 'granted'
-          ) {
-            new Notification(
-              tRef.current.toasts.pushGoalTitle(payload.goal.scoringTeam, payload.goal.minute),
-              {
-                body: `${payload.goal.scorer} — ${payload.goal.homeTeam} ${payload.goal.homeScore} - ${payload.goal.awayScore} ${payload.goal.awayTeam}`,
-              },
-            );
-          }
-        }
+        handleIncomingGoal(payload.goal, payload.match);
       } catch {
         // Ignore malformed goal event
       }
@@ -316,9 +421,12 @@ export default function App() {
     });
 
     return () => {
+      closed = true;
+      window.clearTimeout(connectGuardTimer);
+      if (pollTimer !== null) window.clearInterval(pollTimer);
       es.close();
     };
-  }, []);
+  }, [handleIncomingGoal]);
 
   useEffect(() => {
     if (goalToasts.length === 0) return;
@@ -389,6 +497,7 @@ export default function App() {
         'la-liga',
         'serie-a',
         'bundesliga',
+        'algerian-ligue-1',
         'national-teams',
       ];
       for (const compId of leagueOrder) {
@@ -408,16 +517,32 @@ export default function App() {
   const handleManualRefresh = async () => {
     setRefreshing(true);
     try {
-      const res = await fetch(`/api/live/refresh?lang=${lang}`, { method: 'POST' });
-      if (res.ok) {
-        const data = await res.json();
+      const data = await fetchApiJson<{
+        matches?: FootballMatch[];
+        standings?: Record<Exclude<CompetitionId, 'all'>, StandingRow[]>;
+        topPlayers?: TopPlayerStat[];
+        transfers?: TransferItem[];
+        news?: NewsArticle[];
+        lastSyncedAt?: string;
+      }>(`/api/live/refresh?lang=${lang}`, { method: 'POST' });
+
+      if (data && ((data.matches && data.matches.length > 0) || (data.news && data.news.length > 0))) {
         if (data.matches) setMatches(data.matches);
         if (data.standings) setStandingsByComp(data.standings);
         if (data.topPlayers) setTopPlayers(data.topPlayers);
         if (data.transfers) setTransfers(data.transfers);
         if (data.news) setNews(data.news);
         if (data.lastSyncedAt) setLastSyncedAt(data.lastSyncedAt);
+        return;
       }
+
+      const fallback = await fetchClientFallbackBootstrap(lang);
+      if (fallback.matches.length > 0) setMatches(fallback.matches);
+      setStandingsByComp(fallback.standings);
+      if (fallback.topPlayers.length > 0) setTopPlayers(fallback.topPlayers);
+      if (fallback.transfers.length > 0) setTransfers(fallback.transfers);
+      if (fallback.news.length > 0) setNews(fallback.news);
+      setLastSyncedAt(fallback.lastSyncedAt);
     } finally {
       setRefreshing(false);
     }
@@ -441,11 +566,34 @@ export default function App() {
   };
 
   const handleTriggerTestGoal = async (matchId?: string) => {
-    await fetch('/api/live/trigger-goal', {
+    const data = await fetchApiJson<{ goal?: GoalNotificationEvent }>('/api/live/trigger-goal', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ matchId }),
     });
+    if (data?.goal) {
+      handleIncomingGoal(data.goal, null);
+      return;
+    }
+    const target = matchesRef.current.find((m) => m.status === 'live') ?? matchesRef.current[0];
+    handleIncomingGoal(
+      {
+        id: `test-goal-${Date.now()}`,
+        matchId: target?.id || 'test-match',
+        competitionId: target?.competitionId || 'premier-league',
+        competitionName: target?.competitionName || 'Multiplex Direct',
+        scoringTeam: target?.homeTeam.name || 'THE PITCH Live',
+        homeTeam: target?.homeTeam.shortName || 'DOM',
+        awayTeam: target?.awayTeam.shortName || 'EXT',
+        homeScore: (target?.homeTeam.score ?? 1) + 1,
+        awayScore: target?.awayTeam.score ?? 0,
+        scorer: 'Alerte Test En Direct',
+        minute: target?.minute ?? 75,
+        timestamp: new Date().toISOString(),
+        isTest: true,
+      },
+      null,
+    );
   };
 
   const handleAddComment = useCallback(
@@ -456,25 +604,38 @@ export default function App() {
       clubSupport?: string;
       content: string;
     }) => {
-      const res = await fetch('/api/comments', {
+      const data = await fetchApiJson<{ comment?: SupporterComment }>('/api/comments', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
-      if (!res.ok) throw new Error('Failed to post comment');
-      const data = await res.json();
-      setComments((prev) =>
-        prev.some((c) => c.id === data.comment.id) ? prev : [data.comment, ...prev],
-      );
+      const comment: SupporterComment = data?.comment ?? {
+        id: `com-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        targetType: payload.targetType,
+        targetId: payload.targetId,
+        author: payload.author.trim() || 'Supporter Anonyme',
+        clubSupport: payload.clubSupport?.trim() || undefined,
+        content: payload.content.trim(),
+        createdAt: new Date().toISOString(),
+        likes: 0,
+      };
+      setComments((prev) => (prev.some((c) => c.id === comment.id) ? prev : [comment, ...prev]));
     },
     [],
   );
 
   const handleLikeComment = useCallback(async (commentId: string) => {
-    const res = await fetch(`/api/comments/${commentId}/like`, { method: 'POST' });
-    if (!res.ok) return;
-    const data = await res.json();
-    setComments((prev) => prev.map((c) => (c.id === commentId ? data.comment : c)));
+    const data = await fetchApiJson<{ comment?: SupporterComment }>(
+      `/api/comments/${encodeURIComponent(commentId)}/like`,
+      { method: 'POST' },
+    );
+    if (data?.comment) {
+      setComments((prev) => prev.map((c) => (c.id === commentId ? data.comment! : c)));
+      return;
+    }
+    setComments((prev) =>
+      prev.map((c) => (c.id === commentId ? { ...c, likes: c.likes + 1 } : c)),
+    );
   }, []);
 
   const handleCreateDebate = async (payload: {
@@ -483,25 +644,51 @@ export default function App() {
     author: string;
     options: string[];
   }) => {
-    const res = await fetch('/api/debates', {
+    const data = await fetchApiJson<{ debate?: DebateTopic }>('/api/debates', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     });
-    if (!res.ok) return;
-    const data = await res.json();
-    setDebates((prev) => [data.debate, ...prev]);
+    const debate: DebateTopic = data?.debate ?? {
+      id: `deb-${Date.now()}`,
+      title: payload.title.trim(),
+      description: payload.description.trim(),
+      competitionId: 'all',
+      author: payload.author.trim() || 'Supporter',
+      createdAt: new Date().toISOString(),
+      options: payload.options
+        .filter((o) => o.trim().length > 0)
+        .slice(0, 4)
+        .map((label, idx) => ({ id: `opt-${Date.now()}-${idx}`, label: label.trim(), votes: 0 })),
+    };
+    setDebates((prev) => [debate, ...prev]);
   };
 
   const handleVoteDebate = async (debateId: string, optionId: string) => {
-    const res = await fetch(`/api/debates/${debateId}/vote`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ optionId }),
-    });
-    if (!res.ok) return;
-    const data = await res.json();
-    setDebates((prev) => prev.map((d) => (d.id === debateId ? data.debate : d)));
+    const data = await fetchApiJson<{ debate?: DebateTopic }>(
+      `/api/debates/${encodeURIComponent(debateId)}/vote`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ optionId }),
+      },
+    );
+    if (data?.debate) {
+      setDebates((prev) => prev.map((d) => (d.id === debateId ? data.debate! : d)));
+    } else {
+      setDebates((prev) =>
+        prev.map((d) =>
+          d.id === debateId
+            ? {
+                ...d,
+                options: d.options.map((o) =>
+                  o.id === optionId ? { ...o, votes: o.votes + 1 } : o,
+                ),
+              }
+            : d,
+        ),
+      );
+    }
     const nextVotes = { ...userDebateVotes, [debateId]: optionId };
     setUserDebateVotes(nextVotes);
     localStorage.setItem('thepitch_debate_votes', JSON.stringify(nextVotes));
@@ -511,19 +698,40 @@ export default function App() {
     matchId: string,
     choice: 'home' | 'draw' | 'away',
   ) => {
-    const res = await fetch(`/api/predictions/${matchId}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ choice }),
-    });
-    if (!res.ok) return;
-    const data = await res.json();
-    setPredictions((prev) => {
-      const exists = prev.some((p) => p.matchId === matchId);
-      return exists
-        ? prev.map((p) => (p.matchId === matchId ? data.prediction : p))
-        : [...prev, data.prediction];
-    });
+    const data = await fetchApiJson<{ prediction?: PredictionVoteCounts }>(
+      `/api/predictions/${encodeURIComponent(matchId)}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ choice }),
+      },
+    );
+    if (data?.prediction) {
+      setPredictions((prev) => {
+        const exists = prev.some((p) => p.matchId === matchId);
+        return exists
+          ? prev.map((p) => (p.matchId === matchId ? data.prediction! : p))
+          : [...prev, data.prediction!];
+      });
+    } else {
+      setPredictions((prev) => {
+        const existing = prev.find((p) => p.matchId === matchId) ?? {
+          matchId,
+          homeVotes: 0,
+          drawVotes: 0,
+          awayVotes: 0,
+        };
+        const updated: PredictionVoteCounts = {
+          ...existing,
+          homeVotes: existing.homeVotes + (choice === 'home' ? 1 : 0),
+          drawVotes: existing.drawVotes + (choice === 'draw' ? 1 : 0),
+          awayVotes: existing.awayVotes + (choice === 'away' ? 1 : 0),
+        };
+        return prev.some((p) => p.matchId === matchId)
+          ? prev.map((p) => (p.matchId === matchId ? updated : p))
+          : [...prev, updated];
+      });
+    }
     const nextPreds = { ...userPredictions, [matchId]: choice };
     setUserPredictions(nextPreds);
     localStorage.setItem('thepitch_predictions', JSON.stringify(nextPreds));
@@ -537,21 +745,43 @@ export default function App() {
     lineupAlert: boolean;
     mercatoAlert: boolean;
   }) => {
-    const res = await fetch('/api/alerts', {
+    const data = await fetchApiJson<{ alerts?: UserAlertRule[] }>('/api/alerts', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     });
-    if (!res.ok) return;
-    const data = await res.json();
-    setAlerts(data.alerts);
+    if (data?.alerts) {
+      setAlerts(data.alerts);
+      return;
+    }
+    setAlerts((prev) => {
+      const idx = prev.findIndex(
+        (a) => a.target.toLowerCase() === payload.target.toLowerCase() && a.type === payload.type,
+      );
+      if (idx >= 0) {
+        return prev.map((a, i) => (i === idx ? { ...a, ...payload } : a));
+      }
+      return [
+        {
+          id: `al-${Date.now()}`,
+          ...payload,
+          createdAt: new Date().toISOString(),
+        },
+        ...prev,
+      ];
+    });
   };
 
   const handleDeleteAlert = async (id: string) => {
-    const res = await fetch(`/api/alerts/${id}`, { method: 'DELETE' });
-    if (!res.ok) return;
-    const data = await res.json();
-    setAlerts(data.alerts);
+    const data = await fetchApiJson<{ alerts?: UserAlertRule[] }>(
+      `/api/alerts/${encodeURIComponent(id)}`,
+      { method: 'DELETE' },
+    );
+    if (data?.alerts) {
+      setAlerts(data.alerts);
+      return;
+    }
+    setAlerts((prev) => prev.filter((a) => a.id !== id));
   };
 
   const handleUpdateProfile = (next: UserProfilePreferences) => {

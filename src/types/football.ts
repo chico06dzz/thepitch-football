@@ -5,6 +5,7 @@ export type CompetitionId =
   | 'la-liga'
   | 'serie-a'
   | 'bundesliga'
+  | 'algerian-ligue-1'
   | 'national-teams';
 
 export type MatchStatus = 'live' | 'upcoming' | 'finished';

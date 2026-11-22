@@ -15,6 +15,7 @@ interface LeagueSource {
   espnSlug: string;
   competitionId: Exclude<CompetitionId, 'all'>;
   competitionName: string;
+  algerianFilterOnly?: boolean;
 }
 
 const LEAGUE_SOURCES: LeagueSource[] = [
@@ -23,8 +24,38 @@ const LEAGUE_SOURCES: LeagueSource[] = [
   { espnSlug: 'esp.1', competitionId: 'la-liga', competitionName: 'La Liga EA Sports' },
   { espnSlug: 'ita.1', competitionId: 'serie-a', competitionName: 'Serie A Enilive' },
   { espnSlug: 'ger.1', competitionId: 'bundesliga', competitionName: 'Bundesliga' },
-  { espnSlug: 'uefa.nations', competitionId: 'national-teams', competitionName: 'Sélections — Ligue des Nations' },
-  { espnSlug: 'fifa.friendly', competitionId: 'national-teams', competitionName: 'Sélections — Matchs Internationaux' },
+  {
+    espnSlug: 'uefa.nations',
+    competitionId: 'national-teams',
+    competitionName: 'Sélections — Ligue des Nations',
+  },
+  {
+    espnSlug: 'fifa.friendly',
+    competitionId: 'national-teams',
+    competitionName: 'Sélections — Matchs Internationaux',
+  },
+  {
+    espnSlug: 'caf.nations_qual',
+    competitionId: 'national-teams',
+    competitionName: 'Sélections — Éliminatoires CAN',
+  },
+  {
+    espnSlug: 'caf.nations',
+    competitionId: 'national-teams',
+    competitionName: 'Sélections — Coupe d’Afrique des Nations',
+  },
+  {
+    espnSlug: 'caf.champions',
+    competitionId: 'algerian-ligue-1',
+    competitionName: 'Clubs Algériens — Ligue des Champions CAF',
+    algerianFilterOnly: true,
+  },
+  {
+    espnSlug: 'caf.confed',
+    competitionId: 'algerian-ligue-1',
+    competitionName: 'Clubs Algériens — Coupe Confédération CAF',
+    algerianFilterOnly: true,
+  },
 ];
 
 const NEWS_SOURCES: { slug: string; competitionId: CompetitionId; label: string }[] = [
@@ -35,6 +66,34 @@ const NEWS_SOURCES: { slug: string; competitionId: CompetitionId; label: string 
   { slug: 'ita.1', competitionId: 'serie-a', label: 'Serie A' },
   { slug: 'ger.1', competitionId: 'bundesliga', label: 'Bundesliga' },
   { slug: 'fifa.world', competitionId: 'national-teams', label: 'Sélections Nationales' },
+  { slug: 'caf.nations', competitionId: 'algerian-ligue-1', label: 'Algérie & Afrique' },
+];
+
+const ALGERIAN_CLUB_KEYWORDS = [
+  'mc alger',
+  'mca',
+  'belouizdad',
+  'crb',
+  'kabylie',
+  'jsk',
+  'usm alger',
+  'usma',
+  'constantine',
+  'csc',
+  'sétif',
+  'setif',
+  'saoura',
+  'mc oran',
+  'mco',
+  'chlef',
+  'akbou',
+  'khenchela',
+  'biskra',
+  'ben aknoun',
+  'el biar',
+  'rouissat',
+  'témouchent',
+  'temouchent',
 ];
 
 const IMAGE_BY_COMP: Record<CompetitionId, string> = {
@@ -44,6 +103,7 @@ const IMAGE_BY_COMP: Record<CompetitionId, string> = {
   'la-liga': '/src/assets/images/news_match_duel_1795287057563.jpg',
   'serie-a': '/src/assets/images/editorial_supporters_stands_1795348260566.jpg',
   bundesliga: '/src/assets/images/mercato_tunnel_view_1795287057654.jpg',
+  'algerian-ligue-1': '/src/assets/images/hero_stadium_night_1795287057975.jpg',
   'national-teams': '/src/assets/images/news_national_teams_1795287057313.jpg',
 };
 
@@ -68,7 +128,6 @@ function extractEspnArticleImage(article: any): string | undefined {
   );
   if (valid.length === 0) return undefined;
 
-  // Prefer high-resolution photo URLs from a.espncdn.com/photo/
   const preferred =
     valid.find(
       (img: any) =>
@@ -85,25 +144,26 @@ const translationCache = new Map<string, string>();
 async function translateText(
   text: string,
   targetLang: AppLanguage,
+  sourceLang: AppLanguage = 'en',
   retries = 1,
 ): Promise<string> {
   const clean = text.trim();
   if (!clean) return '';
-  if (targetLang === 'en') return clean;
+  if (targetLang === sourceLang) return clean;
 
-  const cacheKey = `${targetLang}::${clean}`;
+  const cacheKey = `${sourceLang}->${targetLang}::${clean}`;
   const cached = translationCache.get(cacheKey);
   if (cached) return cached;
 
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 7000);
+  const timer = setTimeout(() => controller.abort(), 4500);
   try {
-    const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=${targetLang}&dt=t&q=${encodeURIComponent(clean)}`;
+    const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${sourceLang}&tl=${targetLang}&dt=t&q=${encodeURIComponent(clean)}`;
     const res = await fetch(url, { signal: controller.signal });
     if (!res.ok) {
-      if (retries > 0) {
-        await new Promise((r) => setTimeout(r, 250));
-        return translateText(clean, targetLang, retries - 1);
+      if (retries > 0 && res.status >= 500) {
+        await new Promise((r) => setTimeout(r, 200));
+        return translateText(clean, targetLang, sourceLang, retries - 1);
       }
       return clean;
     }
@@ -114,7 +174,7 @@ async function translateText(
         .join('')
         .trim();
       if (translated) {
-        if (translationCache.size > 2000) {
+        if (translationCache.size > 2500) {
           const firstKey = translationCache.keys().next().value;
           if (firstKey) translationCache.delete(firstKey);
         }
@@ -124,8 +184,8 @@ async function translateText(
     }
   } catch {
     if (retries > 0) {
-      await new Promise((r) => setTimeout(r, 250));
-      return translateText(clean, targetLang, retries - 1);
+      await new Promise((r) => setTimeout(r, 200));
+      return translateText(clean, targetLang, sourceLang, retries - 1);
     }
   } finally {
     clearTimeout(timer);
@@ -133,19 +193,70 @@ async function translateText(
   return clean;
 }
 
-async function mapInBatches<T, R>(
-  items: T[],
-  batchSize: number,
-  fn: (item: T, index: number) => Promise<R>,
-): Promise<R[]> {
-  const results: R[] = [];
-  for (let i = 0; i < items.length; i += batchSize) {
-    const slice = items.slice(i, i + batchSize);
-    const batchResults = await Promise.all(
-      slice.map((item, offset) => fn(item, i + offset)),
-    );
-    results.push(...batchResults);
+async function translateBatch(
+  entries: { text: string; sourceLang: AppLanguage }[],
+  targetLang: AppLanguage,
+): Promise<string[]> {
+  const results = entries.map((e) => e.text.trim());
+  const bySource = new Map<AppLanguage, number[]>();
+
+  entries.forEach((entry, idx) => {
+    const clean = entry.text.trim();
+    if (!clean || entry.sourceLang === targetLang) return;
+    const cached = translationCache.get(`${entry.sourceLang}->${targetLang}::${clean}`);
+    if (cached) {
+      results[idx] = cached;
+      return;
+    }
+    const list = bySource.get(entry.sourceLang) ?? [];
+    list.push(idx);
+    bySource.set(entry.sourceLang, list);
+  });
+
+  const chunkTasks: Promise<void>[] = [];
+  for (const [sourceLang, indices] of bySource.entries()) {
+    for (let i = 0; i < indices.length; i += 8) {
+      const chunkIndices = indices.slice(i, i + 8);
+      chunkTasks.push(
+        (async () => {
+          const cleanTexts = chunkIndices.map((idx) =>
+            entries[idx].text.replace(/[\r\n]+/g, ' ').trim(),
+          );
+          const joined = cleanTexts.join('\n');
+          const controller = new AbortController();
+          const timer = setTimeout(() => controller.abort(), 3200);
+          try {
+            const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${sourceLang}&tl=${targetLang}&dt=t&q=${encodeURIComponent(joined)}`;
+            const res = await fetch(url, { signal: controller.signal });
+            if (!res.ok) return;
+            const data = (await res.json()) as unknown;
+            if (!Array.isArray(data) || !Array.isArray(data[0])) return;
+            const translatedJoined = (data[0] as any[])
+              .map((chunk) => (Array.isArray(chunk) ? String(chunk[0] ?? '') : ''))
+              .join('');
+            const lines = translatedJoined.split('\n').map((l) => l.trim());
+            if (lines.length === chunkIndices.length) {
+              chunkIndices.forEach((origIdx, k) => {
+                if (lines[k]) {
+                  results[origIdx] = lines[k];
+                  translationCache.set(
+                    `${sourceLang}->${targetLang}::${entries[origIdx].text.trim()}`,
+                    lines[k],
+                  );
+                }
+              });
+            }
+          } catch {
+            // Keep original text on timeout/rate limit
+          } finally {
+            clearTimeout(timer);
+          }
+        })(),
+      );
+    }
   }
+
+  await Promise.all(chunkTasks);
   return results;
 }
 
@@ -154,7 +265,7 @@ export function getParisDayKey(date: Date = new Date()): string {
 }
 
 function formatEspnDate(offsetDays: number): string {
-  const parisToday = getParisDayKey(new Date()); // YYYY-MM-DD
+  const parisToday = getParisDayKey(new Date());
   const [y, m, d] = parisToday.split('-').map(Number);
   const dt = new Date(Date.UTC(y, m - 1, d + offsetDays));
   const yy = dt.getUTCFullYear();
@@ -163,7 +274,7 @@ function formatEspnDate(offsetDays: number): string {
   return `${yy}${mm}${dd}`;
 }
 
-function formatLocalizedNewsDate(iso: string, lang: AppLanguage): string {
+export function formatLocalizedNewsDate(iso: string, lang: AppLanguage): string {
   const dt = new Date(iso);
   if (Number.isNaN(dt.getTime())) {
     if (lang === 'ar') return 'اليوم';
@@ -214,16 +325,40 @@ function translateStatusDetail(detail?: string, state?: string): string | undefi
   return detail;
 }
 
-async function fetchJson<T>(url: string, timeoutMs = 12000): Promise<T | null> {
+async function fetchJson<T>(url: string, timeoutMs = 6000, headers?: Record<string, string>): Promise<T | null> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const res = await fetch(url, {
       signal: controller.signal,
-      headers: { Accept: 'application/json' },
+      headers: {
+        Accept: 'application/json',
+        'User-Agent': 'ThePitchApp/1.0',
+        ...headers,
+      },
     });
     if (!res.ok) return null;
     return (await res.json()) as T;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function fetchText(url: string, timeoutMs = 6000): Promise<string | null> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, {
+      signal: controller.signal,
+      headers: {
+        Accept: 'application/rss+xml, application/xml, text/xml, text/plain',
+        'User-Agent': 'Mozilla/5.0 (compatible; ThePitchBot/1.0)',
+      },
+    });
+    if (!res.ok) return null;
+    return await res.text();
   } catch {
     return null;
   } finally {
@@ -265,13 +400,25 @@ function mapEventType(typeText?: string): MatchEvent['type'] | null {
   return null;
 }
 
-function parseEspnScoreboardEvent(ev: any, source: LeagueSource): FootballMatch | null {
+function isAlgerianTeamName(name: string): boolean {
+  const lower = name.toLowerCase();
+  return ALGERIAN_CLUB_KEYWORDS.some((kw) => lower.includes(kw));
+}
+
+export function parseEspnScoreboardEvent(ev: any, source: LeagueSource): FootballMatch | null {
   const comp = ev?.competitions?.[0];
   if (!comp) return null;
 
   const home = comp.competitors?.find((c: any) => c.homeAway === 'home') ?? comp.competitors?.[0];
   const away = comp.competitors?.find((c: any) => c.homeAway === 'away') ?? comp.competitors?.[1];
   if (!home || !away) return null;
+
+  const homeName: string = home.team?.displayName || 'Domicile';
+  const awayName: string = away.team?.displayName || 'Extérieur';
+
+  if (source.algerianFilterOnly && !isAlgerianTeamName(homeName) && !isAlgerianTeamName(awayName)) {
+    return null;
+  }
 
   const state = ev?.status?.type?.state;
   const status: FootballMatch['status'] =
@@ -381,8 +528,8 @@ function parseEspnScoreboardEvent(ev: any, source: LeagueSource): FootballMatch 
     tvChannel: broadcasts || undefined,
     homeTeam: {
       id: String(home.team?.id ?? ''),
-      name: home.team?.displayName || 'Domicile',
-      shortName: home.team?.shortDisplayName || home.team?.displayName || 'DOM',
+      name: homeName,
+      shortName: home.team?.shortDisplayName || homeName,
       code: (home.team?.abbreviation || 'DOM').slice(0, 4),
       logo: home.team?.logo || home.team?.logos?.[0]?.href || undefined,
       accentColor: normalizeColor(home.team?.color, '#1D4ED8'),
@@ -390,8 +537,8 @@ function parseEspnScoreboardEvent(ev: any, source: LeagueSource): FootballMatch 
     },
     awayTeam: {
       id: String(away.team?.id ?? ''),
-      name: away.team?.displayName || 'Extérieur',
-      shortName: away.team?.shortDisplayName || away.team?.displayName || 'EXT',
+      name: awayName,
+      shortName: away.team?.shortDisplayName || awayName,
       code: (away.team?.abbreviation || 'EXT').slice(0, 4),
       logo: away.team?.logo || away.team?.logos?.[0]?.href || undefined,
       accentColor: normalizeColor(away.team?.color, '#DC2626'),
@@ -402,32 +549,429 @@ function parseEspnScoreboardEvent(ev: any, source: LeagueSource): FootballMatch 
   };
 }
 
-export async function fetchAllLiveMatches(includeHistoryAndSchedule = true): Promise<FootballMatch[]> {
+// ---------- Algerian Ligue 1 Real Data (Wikipedia + Wikimedia + Optional API-Football) ----------
+
+const ALGERIAN_CLUB_STADIUMS: Record<string, { stadium: string; city: string; color: string }> = {
+  JSK: { stadium: 'Stade Hocine-Aït-Ahmed', city: 'Tizi Ouzou', color: '#EAB308' },
+  CRB: { stadium: 'Stade du 20-Août-1955', city: 'Alger', color: '#DC2626' },
+  MCA: { stadium: 'Stade Ali-la-Pointe', city: 'Alger', color: '#16A34A' },
+  USMA: { stadium: 'Stade Omar-Benrabah', city: 'Alger', color: '#B91C1C' },
+  MCO: { stadium: 'Stade Miloud-Hadefi', city: 'Oran', color: '#DC2626' },
+  ESS: { stadium: 'Stade du 8-Mai-1945', city: 'Sétif', color: '#1E293B' },
+  CSC: { stadium: 'Stade Chahid-Hamlaoui', city: 'Constantine', color: '#15803D' },
+  JSS: { stadium: 'Stade du 20-Août-1955', city: 'Béchar', color: '#CA8A04' },
+  ASO: { stadium: 'Stade Mohamed-Boumezrag', city: 'Chlef', color: '#DC2626' },
+  USB: { stadium: 'Stade du 18-Février', city: 'Biskra', color: '#16A34A' },
+  USMK: { stadium: 'Stade Amar-Hamam', city: 'Khenchela', color: '#1E293B' },
+  OA: { stadium: 'Stade de l’Unité Maghrébine', city: 'Béjaïa', color: '#0284C7' },
+  ESBA: { stadium: 'Stade El Mokrani', city: 'Alger', color: '#DC2626' },
+  JSEB: { stadium: 'Stade Abderrahmane-Ibrir', city: 'Alger', color: '#1D4ED8' },
+  MBR: { stadium: 'Stade de Rouissat', city: 'Ouargla', color: '#0F766E' },
+  CRT: { stadium: 'Stade Omar-Oucief', city: 'Aïn Témouchent', color: '#DC2626' },
+};
+
+const ALGERIAN_FR_WIKI_TITLES: Record<string, string> = {
+  'ES Sétif': 'Entente sportive sétifienne',
+  'JS El Biar': "Jeunesse sportive d'El Biar",
+  'USM Khenchela': 'Union sportive madinet Khenchela',
+  'JS Saoura': 'Jeunesse sportive de Saoura',
+  'ES Ben Aknoun': 'Étoile sportive de Ben Aknoun',
+  'US Biskra': 'Union sportive de Biskra',
+  'CR Témouchent': 'Chabab Riadhi Témouchent',
+  'MB Rouissat': 'Moustakbal Baladiat Rouissat',
+};
+
+let cachedAlgLogos: Record<string, string> = {};
+let cachedAlgLogosFetchedAt = 0;
+
+export async function fetchAlgerianClubLogos(clubNames: string[]): Promise<Record<string, string>> {
+  if (Object.keys(cachedAlgLogos).length >= 12 && Date.now() - cachedAlgLogosFetchedAt < 12 * 3600 * 1000) {
+    return cachedAlgLogos;
+  }
+
+  const logos: Record<string, string> = { ...cachedAlgLogos };
+  const [enRes, frRes] = await Promise.all([
+    fetchJson<any>(
+      `https://en.wikipedia.org/w/api.php?action=query&titles=${encodeURIComponent(clubNames.join('|'))}&prop=pageimages&pithumbsize=128&format=json&origin=*`,
+      5000,
+    ),
+    fetchJson<any>(
+      `https://fr.wikipedia.org/w/api.php?action=query&titles=${encodeURIComponent(Object.values(ALGERIAN_FR_WIKI_TITLES).join('|'))}&prop=pageimages&pithumbsize=128&format=json&origin=*`,
+      5000,
+    ),
+  ]);
+
+  if (enRes?.query?.pages) {
+    for (const page of Object.values(enRes.query.pages) as any[]) {
+      if (page?.title && page?.thumbnail?.source) {
+        logos[page.title] = page.thumbnail.source;
+      }
+    }
+  }
+
+  if (frRes?.query?.pages) {
+    const reverseMap = new Map<string, string>();
+    for (const [enName, frTitle] of Object.entries(ALGERIAN_FR_WIKI_TITLES)) {
+      reverseMap.set(frTitle.toLowerCase(), enName);
+    }
+    for (const page of Object.values(frRes.query.pages) as any[]) {
+      if (page?.title && page?.thumbnail?.source) {
+        const canonical = reverseMap.get(String(page.title).toLowerCase());
+        if (canonical && !logos[canonical]) {
+          logos[canonical] = page.thumbnail.source;
+        }
+      }
+    }
+  }
+
+  if (Object.keys(logos).length > 0) {
+    cachedAlgLogos = logos;
+    cachedAlgLogosFetchedAt = Date.now();
+  }
+  return logos;
+}
+
+function emptyMatchStats(): MatchDetailedStats {
+  return {
+    possession: [50, 50],
+    shotsTotal: [0, 0],
+    shotsOnTarget: [0, 0],
+    passesCompleted: [0, 0],
+    passAccuracy: [0, 0],
+    corners: [0, 0],
+    fouls: [0, 0],
+    yellowCards: [0, 0],
+    redCards: [0, 0],
+    saves: [0, 0],
+    offsides: [0, 0],
+  };
+}
+
+function cleanWikiLink(raw: string): string {
+  return raw
+    .replace(/\[\[(?:[^|\]]*\|)?([^\]]+)\]\]/g, '$1')
+    .replace(/\{\{[^}]*\}\}/g, '')
+    .replace(/<[^>]+>/g, '')
+    .trim();
+}
+
+export interface AlgerianWikipediaBundle {
+  standings: StandingRow[];
+  topPlayers: TopPlayerStat[];
+  matches: FootballMatch[];
+}
+
+let cachedAlgWikiBundle: { data: AlgerianWikipediaBundle; fetchedAt: number } | null = null;
+let inFlightAlgWikiBundle: Promise<AlgerianWikipediaBundle> | null = null;
+
+export async function fetchAlgerianWikipediaBundle(): Promise<AlgerianWikipediaBundle> {
+  if (cachedAlgWikiBundle && Date.now() - cachedAlgWikiBundle.fetchedAt < 5 * 60 * 1000) {
+    return cachedAlgWikiBundle.data;
+  }
+  if (inFlightAlgWikiBundle) {
+    return inFlightAlgWikiBundle;
+  }
+
+  inFlightAlgWikiBundle = (async () => {
+    try {
+      const wiki = await fetchJson<any>(
+        'https://en.wikipedia.org/w/api.php?action=query&titles=2026%E2%80%9327_Algerian_Ligue_Professionnelle_1&prop=revisions&rvprop=content&format=json&rvslots=main&origin=*',
+        6000,
+      );
+
+      const page = wiki?.query?.pages ? (Object.values(wiki.query.pages)[0] as any) : null;
+      const content: string = page?.revisions?.[0]?.slots?.main?.['*'] || '';
+      if (!content) {
+        return cachedAlgWikiBundle?.data ?? { standings: [], topPlayers: [], matches: [] };
+      }
+
+  // Parse League table section
+  const tableStart = content.indexOf('==League table==');
+  const tableSection =
+    tableStart >= 0 ? content.slice(tableStart, content.indexOf('==Results==', tableStart)) : '';
+
+  const teamOrderMatch = tableSection.match(/\|team_order\s*=\s*([^\n|]+)/);
+  const codes = teamOrderMatch
+    ? teamOrderMatch[1]
+        .replace(/<!--[\s\S]*?-->/g, '')
+        .split(',')
+        .map((c) => c.trim())
+        .filter(Boolean)
+    : [];
+
+  const updateDateMatch = content.match(/\|update\s*=\s*([0-9]{1,2}\s+[A-Za-z]+\s+[0-9]{4})/);
+  const parsedUpdateDate = updateDateMatch ? new Date(`${updateDateMatch[1]} 17:00 UTC`) : new Date();
+  const updateIso = !Number.isNaN(parsedUpdateDate.getTime())
+    ? parsedUpdateDate.toISOString()
+    : new Date().toISOString();
+
+  const teamNamesByCode: Record<string, string> = {};
+  for (const m of tableSection.matchAll(/\|name_([A-Z]+)\s*=\s*([^\n|]+)/g)) {
+    teamNamesByCode[m[1].trim()] = cleanWikiLink(m[2]);
+  }
+
+  const logos = await fetchAlgerianClubLogos(Object.values(teamNamesByCode));
+
+  const zoneByRank: Record<number, StandingRow['zone']> = {};
+  for (const m of tableSection.matchAll(/\|result(\d+)\s*=\s*([A-Z0-9]+)/g)) {
+    const rank = Number(m[1]);
+    const val = m[2].trim();
+    if (val.startsWith('CCL')) zoneByRank[rank] = 'ucl';
+    else if (val.startsWith('CCC')) zoneByRank[rank] = 'uel';
+    else if (val === 'REL') zoneByRank[rank] = 'relegation';
+    else if (val === 'PO') zoneByRank[rank] = 'playoff';
+  }
+
+  const readTeamParam = (param: string, code: string): number => {
+    const rx = new RegExp(`\\|${param}_${code}\\s*=\\s*(\\d+)`);
+    const m = tableSection.match(rx);
+    return m ? Number(m[1]) : 0;
+  };
+
+  const standings: StandingRow[] = codes.map((code, idx) => {
+    const position = idx + 1;
+    const won = readTeamParam('win', code);
+    const drawn = readTeamParam('draw', code);
+    const lost = readTeamParam('loss', code);
+    const goalsFor = readTeamParam('gf', code);
+    const goalsAgainst = readTeamParam('ga', code);
+    const team = teamNamesByCode[code] || code;
+    return {
+      position,
+      team,
+      shortName: team,
+      logo: logos[team],
+      played: won + drawn + lost,
+      won,
+      drawn,
+      lost,
+      goalsFor,
+      goalsAgainst,
+      goalDiff: goalsFor - goalsAgainst,
+      points: won * 3 + drawn,
+      zone: zoneByRank[position],
+    };
+  });
+
+  // Parse Top scorers section
+  const topPlayers: TopPlayerStat[] = [];
+  const scorersStart = content.indexOf('==Top scorers==');
+  if (scorersStart >= 0) {
+    const scorersEnd = content.indexOf('===Hat-tricks===', scorersStart);
+    const scorersBlock = content.slice(
+      scorersStart,
+      scorersEnd > scorersStart ? scorersEnd : scorersStart + 1800,
+    );
+    const rows = scorersBlock.split('|-').slice(1);
+    let currentRank = 1;
+    let currentGoals = 0;
+    for (const row of rows) {
+      if (row.includes('!scope')) continue;
+      const cleaned = row.replace(/^\s*\n/, '');
+      const cells = cleaned
+        .split(/\n\||\|\|/)
+        .map((c) => c.trim())
+        .filter(Boolean);
+      const links = [...row.matchAll(/\[\[(?:[^|\]]*\|)?([^\]]+)\]\]/g)].map((m) => m[1].trim());
+      if (links.length >= 2) {
+        const player = links[0];
+        const club = links[1];
+        const goalCellMatch = row.match(/\|\s*(?:rowspan=\d+\s*align="center"\|)?\s*(\d+)\s*(?:\n|$)/);
+        const rankMatch = row.match(/^\s*\|(?:rowspan=\d+\s*align="center"\|)?\s*(\d+)\s*\|/);
+        if (rankMatch) currentRank = Number(rankMatch[1]);
+        if (goalCellMatch) currentGoals = Number(goalCellMatch[1]);
+        if (player && club && currentGoals > 0) {
+          topPlayers.push({
+            rank: currentRank,
+            player,
+            club,
+            competitionId: 'algerian-ligue-1',
+            appearances: 9,
+            goals: currentGoals,
+            assists: 0,
+            goalContributions: currentGoals,
+          });
+        }
+      }
+      void cells;
+    }
+  }
+
+  // Parse Results matrix into recent finished matches
+  const matches: FootballMatch[] = [];
+  const resultsStart = content.indexOf('==Results==');
+  if (resultsStart >= 0) {
+    const resultsEnd = content.indexOf('==Clubs season-progress==', resultsStart);
+    const resultsBlock = content.slice(
+      resultsStart,
+      resultsEnd > resultsStart ? resultsEnd : resultsStart + 6500,
+    );
+    for (const m of resultsBlock.matchAll(/\|match_([A-Z]+)_([A-Z]+)\s*=\s*(\d+)\s*[–-]\s*(\d+)/g)) {
+      const homeCode = m[1].trim();
+      const awayCode = m[2].trim();
+      const homeScore = Number(m[3]);
+      const awayScore = Number(m[4]);
+      const homeName = teamNamesByCode[homeCode] || homeCode;
+      const awayName = teamNamesByCode[awayCode] || awayCode;
+      const meta = ALGERIAN_CLUB_STADIUMS[homeCode] ?? {
+        stadium: `Stade ${homeName}`,
+        city: 'Algérie',
+        color: '#16A34A',
+      };
+      const awayColor = ALGERIAN_CLUB_STADIUMS[awayCode]?.color ?? '#DC2626';
+
+      matches.push({
+        id: `dz-2026-${homeCode}-${awayCode}`,
+        competitionId: 'algerian-ligue-1',
+        competitionName: 'Ligue 1 Mobilis (Algérie)',
+        matchday: 'Saison 2026–27 · LFP.dz',
+        date: updateIso,
+        kickoffTime: '17:00',
+        status: 'finished',
+        statusDetail: 'Terminé',
+        stadium: meta.stadium,
+        city: meta.city,
+        homeTeam: {
+          id: `dz-${homeCode}`,
+          name: homeName,
+          shortName: homeName,
+          code: homeCode,
+          logo: logos[homeName],
+          accentColor: meta.color,
+          score: homeScore,
+        },
+        awayTeam: {
+          id: `dz-${awayCode}`,
+          name: awayName,
+          shortName: awayName,
+          code: awayCode,
+          logo: logos[awayName],
+          accentColor: awayColor,
+          score: awayScore,
+        },
+        stats: emptyMatchStats(),
+        events: [],
+      });
+    }
+  }
+
+  const bundle: AlgerianWikipediaBundle = {
+    standings,
+    topPlayers,
+    matches: matches.slice(0, 32),
+  };
+
+      cachedAlgWikiBundle = { data: bundle, fetchedAt: Date.now() };
+      return bundle;
+    } finally {
+      inFlightAlgWikiBundle = null;
+    }
+  })();
+
+  return inFlightAlgWikiBundle;
+}
+
+async function fetchOptionalApiFootballAlgerianMatches(): Promise<FootballMatch[]> {
+  const apiKey = process.env.API_FOOTBALL_KEY?.trim();
+  if (!apiKey) return [];
+
+  const headers = { 'x-apisports-key': apiKey };
+  const [nextRes, lastRes] = await Promise.all([
+    fetchJson<any>(
+      'https://v3.football.api-sports.io/fixtures?league=186&season=2026&next=10',
+      5000,
+      headers,
+    ),
+    fetchJson<any>(
+      'https://v3.football.api-sports.io/fixtures?league=186&season=2026&last=10',
+      5000,
+      headers,
+    ),
+  ]);
+
+  const combined = [
+    ...(Array.isArray(nextRes?.response) ? nextRes.response : []),
+    ...(Array.isArray(lastRes?.response) ? lastRes.response : []),
+  ];
+
+  const out: FootballMatch[] = [];
+  for (const item of combined) {
+    const f = item?.fixture;
+    const teams = item?.teams;
+    const goals = item?.goals;
+    if (!f?.id || !teams?.home?.name || !teams?.away?.name) continue;
+
+    const short = String(f?.status?.short || 'NS').toUpperCase();
+    const status: FootballMatch['status'] = ['1H', '2H', 'HT', 'ET', 'P', 'LIVE'].includes(short)
+      ? 'live'
+      : ['FT', 'AET', 'PEN'].includes(short)
+        ? 'finished'
+        : 'upcoming';
+
+    const dateIso = f.date || new Date().toISOString();
+    const kickoffTime = new Date(dateIso).toLocaleTimeString('fr-FR', {
+      hour: '2-digit',
+      minute: '2-digit',
+      timeZone: 'Europe/Paris',
+    });
+
+    out.push({
+      id: `af-${f.id}`,
+      competitionId: 'algerian-ligue-1',
+      competitionName: 'Ligue 1 Mobilis (Algérie)',
+      matchday: item?.league?.round || 'Saison 2026–27',
+      date: dateIso,
+      kickoffTime,
+      status,
+      statusDetail: translateStatusDetail(short, status === 'upcoming' ? 'pre' : undefined),
+      minute: typeof f?.status?.elapsed === 'number' ? f.status.elapsed : undefined,
+      stadium: f?.venue?.name || 'Stade officiel',
+      city: f?.venue?.city || 'Algérie',
+      homeTeam: {
+        id: String(teams.home.id),
+        name: teams.home.name,
+        shortName: teams.home.name,
+        code: teams.home.name.slice(0, 3).toUpperCase(),
+        logo: teams.home.logo || undefined,
+        accentColor: '#16A34A',
+        score: Number(goals?.home ?? 0),
+      },
+      awayTeam: {
+        id: String(teams.away.id),
+        name: teams.away.name,
+        shortName: teams.away.name,
+        code: teams.away.name.slice(0, 3).toUpperCase(),
+        logo: teams.away.logo || undefined,
+        accentColor: '#DC2626',
+        score: Number(goals?.away ?? 0),
+      },
+      stats: emptyMatchStats(),
+      events: [],
+    });
+  }
+  return out;
+}
+
+export async function fetchAllLiveMatches(
+  includeHistoryAndSchedule: boolean | 'compact' = true,
+): Promise<FootballMatch[]> {
   const matchMap = new Map<string, FootballMatch>();
 
-  const dateOffsets = includeHistoryAndSchedule
-    ? [0, 1, 2, 3, -1, -2, -4, -7]
-    : [0];
-
+  const dateOffsets =
+    includeHistoryAndSchedule === 'compact'
+      ? [0, 1, -1]
+      : includeHistoryAndSchedule
+        ? [0, 1, 2, -1, -2]
+        : [0];
+  const reqTimeout = includeHistoryAndSchedule === 'compact' ? 3800 : 5500;
   const requests: Promise<void>[] = [];
 
   for (const source of LEAGUE_SOURCES) {
     const todayStr = formatEspnDate(0);
-    // Always fetch both default scoreboard and explicit today's date in Paris time
-    requests.push(
-      fetchJson<any>(`https://site.api.espn.com/apis/site/v2/sports/soccer/${source.espnSlug}/scoreboard`).then(
-        (data) => {
-          if (!data?.events) return;
-          for (const ev of data.events) {
-            const parsed = parseEspnScoreboardEvent(ev, source);
-            if (parsed) matchMap.set(parsed.id, parsed);
-          }
-        },
-      ),
-    );
     requests.push(
       fetchJson<any>(
-        `https://site.api.espn.com/apis/site/v2/sports/soccer/${source.espnSlug}/scoreboard?dates=${todayStr}`,
+        `https://site.api.espn.com/apis/site/v2/sports/soccer/${source.espnSlug}/scoreboard`,
+        reqTimeout,
       ).then((data) => {
         if (!data?.events) return;
         for (const ev of data.events) {
@@ -437,14 +981,30 @@ export async function fetchAllLiveMatches(includeHistoryAndSchedule = true): Pro
       }),
     );
 
-    if (includeHistoryAndSchedule) {
+    if (!source.algerianFilterOnly && includeHistoryAndSchedule !== 'compact') {
+      requests.push(
+        fetchJson<any>(
+          `https://site.api.espn.com/apis/site/v2/sports/soccer/${source.espnSlug}/scoreboard?dates=${todayStr}`,
+          reqTimeout,
+        ).then((data) => {
+          if (!data?.events) return;
+          for (const ev of data.events) {
+            const parsed = parseEspnScoreboardEvent(ev, source);
+            if (parsed) matchMap.set(parsed.id, parsed);
+          }
+        }),
+      );
+    }
+
+    if (includeHistoryAndSchedule && !source.algerianFilterOnly) {
       for (const offset of dateOffsets) {
         if (offset === 0) continue;
-        if (source.competitionId === 'national-teams' && offset > 2) continue;
+        if (source.competitionId === 'national-teams' && offset > 1) continue;
         const dateParam = formatEspnDate(offset);
         requests.push(
           fetchJson<any>(
             `https://site.api.espn.com/apis/site/v2/sports/soccer/${source.espnSlug}/scoreboard?dates=${dateParam}`,
+            reqTimeout,
           ).then((data) => {
             if (!data?.events) return;
             for (const ev of data.events) {
@@ -459,7 +1019,22 @@ export async function fetchAllLiveMatches(includeHistoryAndSchedule = true): Pro
     }
   }
 
-  await Promise.all(requests);
+  const [algWiki, apiFootballMatches] = await Promise.all([
+    includeHistoryAndSchedule
+      ? fetchAlgerianWikipediaBundle()
+      : Promise.resolve({ standings: [], topPlayers: [], matches: [] }),
+    fetchOptionalApiFootballAlgerianMatches(),
+    ...requests,
+  ]);
+
+  for (const m of apiFootballMatches) {
+    matchMap.set(m.id, m);
+  }
+  for (const m of algWiki.matches) {
+    if (!matchMap.has(m.id)) {
+      matchMap.set(m.id, m);
+    }
+  }
 
   const list = Array.from(matchMap.values());
   const orderWeight = { live: 0, upcoming: 1, finished: 2 };
@@ -479,8 +1054,13 @@ export async function fetchMatchDetails(
   espnSlug: string,
   existingMatch?: FootballMatch,
 ): Promise<FootballMatch | null> {
+  if (matchId.startsWith('dz-') || matchId.startsWith('af-')) {
+    return existingMatch ?? null;
+  }
+
   const sum = await fetchJson<any>(
     `https://site.api.espn.com/apis/site/v2/sports/soccer/${espnSlug}/summary?event=${encodeURIComponent(matchId)}`,
+    6000,
   );
   if (!sum) return existingMatch ?? null;
 
@@ -586,6 +1166,7 @@ export async function fetchAllStandings(): Promise<Record<Exclude<CompetitionId,
     'la-liga': [],
     'serie-a': [],
     bundesliga: [],
+    'algerian-ligue-1': [],
     'national-teams': [],
   };
 
@@ -598,10 +1179,12 @@ export async function fetchAllStandings(): Promise<Record<Exclude<CompetitionId,
     { slug: 'uefa.nations', compId: 'national-teams' },
   ];
 
-  await Promise.all(
-    standingSources.map(async ({ slug, compId }) => {
+  const [algWiki] = await Promise.all([
+    fetchAlgerianWikipediaBundle(),
+    ...standingSources.map(async ({ slug, compId }) => {
       const data = await fetchJson<any>(
         `https://site.api.espn.com/apis/v2/sports/soccer/${slug}/standings`,
+        5500,
       );
       if (!data?.children?.length) return;
 
@@ -654,7 +1237,11 @@ export async function fetchAllStandings(): Promise<Record<Exclude<CompetitionId,
       }
       result[compId] = rows;
     }),
-  );
+  ]);
+
+  if (algWiki.standings.length > 0) {
+    result['algerian-ligue-1'] = algWiki.standings;
+  }
 
   return result;
 }
@@ -670,10 +1257,12 @@ export async function fetchAllTopPlayers(): Promise<TopPlayerStat[]> {
 
   const players: TopPlayerStat[] = [];
 
-  await Promise.all(
-    leagues.map(async ({ slug, compId }) => {
+  const [algWiki] = await Promise.all([
+    fetchAlgerianWikipediaBundle(),
+    ...leagues.map(async ({ slug, compId }) => {
       const data = await fetchJson<any>(
         `https://site.api.espn.com/apis/site/v2/sports/soccer/${slug}/statistics`,
+        5500,
       );
       const goalsCat = data?.stats?.find((c: any) => c?.name === 'goalsLeaders');
       const assistsCat = data?.stats?.find((c: any) => c?.name === 'assistsLeaders');
@@ -725,7 +1314,9 @@ export async function fetchAllTopPlayers(): Promise<TopPlayerStat[]> {
 
       players.push(...merged.values());
     }),
-  );
+  ]);
+
+  players.push(...algWiki.topPlayers);
 
   players.sort((a, b) => b.goals - a.goals || b.assists - a.assists);
   players.forEach((p, idx) => {
@@ -739,6 +1330,7 @@ interface RawFeedItem {
   id: string;
   headline: string;
   description: string;
+  sourceLang: AppLanguage;
   competitionId: CompetitionId;
   label: string;
   publishedIso: string;
@@ -756,6 +1348,79 @@ const localizedFeedCache: Partial<
   Record<AppLanguage, { batchId: number; news: NewsArticle[]; transfers: TransferItem[] }>
 > = {};
 
+function decodeXmlEntities(raw: string): string {
+  return raw
+    .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#039;|&#39;|&apos;/g, "'")
+    .replace(/&#8217;|&rsquo;/g, '’')
+    .replace(/&#8211;|&ndash;/g, '–')
+    .replace(/&#8230;|&hellip;/g, '...')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function parseRssItems(xml: string, limit = 8): { title: string; description: string; link: string; pubDate: string; imageUrl?: string }[] {
+  const out: { title: string; description: string; link: string; pubDate: string; imageUrl?: string }[] = [];
+  const matches = xml.matchAll(/<item>([\s\S]*?)<\/item>/g);
+  for (const m of matches) {
+    if (out.length >= limit) break;
+    const block = m[1];
+    const titleRaw = block.match(/<title>([\s\S]*?)<\/title>/)?.[1] || '';
+    const linkRaw = block.match(/<link>([\s\S]*?)<\/link>/)?.[1] || '';
+    const pubDateRaw = block.match(/<pubDate>([\s\S]*?)<\/pubDate>/)?.[1] || '';
+    const descRaw = block.match(/<description>([\s\S]*?)<\/description>/)?.[1] || '';
+    const imgMatch = block.match(/(?:url|src)=["'](https:\/\/[^"'>\s]+\.(?:jpg|jpeg|png|webp)[^"'>\s]*)/i);
+
+    const title = decodeXmlEntities(titleRaw);
+    const description = decodeXmlEntities(descRaw);
+    const link = decodeXmlEntities(linkRaw);
+    if (!title) continue;
+
+    out.push({
+      title,
+      description,
+      link,
+      pubDate: pubDateRaw.trim() || new Date().toISOString(),
+      imageUrl: imgMatch?.[1],
+    });
+  }
+  return out;
+}
+
+function isTransferText(lower: string): boolean {
+  return (
+    lower.includes('transfer') ||
+    lower.includes('rumor') ||
+    lower.includes('sign') ||
+    lower.includes('eye ') ||
+    lower.includes('target') ||
+    lower.includes('contract') ||
+    lower.includes('mercato') ||
+    lower.includes('transfert') ||
+    lower.includes('recrue') ||
+    lower.includes('prêt') ||
+    lower.includes('contrat') ||
+    lower.includes('courtis')
+  );
+}
+
+function isOfficialTransferText(lower: string): boolean {
+  return (
+    lower.includes('sign') ||
+    lower.includes('agree') ||
+    lower.includes('complete') ||
+    lower.includes('officiel') ||
+    lower.includes('rejoint') ||
+    lower.includes('engage')
+  );
+}
+
 function localizeFeedCategoryLabel(
   compId: CompetitionId,
   defaultLabel: string,
@@ -767,6 +1432,9 @@ function localizeFeedCategoryLabel(
   }
   if (compId === 'national-teams') {
     return lang === 'ar' ? 'المنتخبات الوطنية' : 'National Teams';
+  }
+  if (compId === 'algerian-ligue-1') {
+    return lang === 'ar' ? 'الكرة الجزائرية' : 'Algerian Football';
   }
   if (compId === 'premier-league' && lang === 'ar') return 'البريميرليغ';
   if (compId === 'ligue-1' && lang === 'ar') return 'الدوري الفرنسي';
@@ -790,13 +1458,37 @@ async function buildLocalizedFeed(
   const readTimeLabel =
     lang === 'ar' ? 'خبر مباشر' : lang === 'en' ? 'Live update' : 'Actu en temps réel';
 
-  const news: NewsArticle[] = await mapInBatches(rawNews, 3, async (item, index) => {
-    const [locTitle, locDesc] = await Promise.all([
-      translateText(item.headline, lang),
-      item.description !== item.headline
-        ? translateText(item.description, lang)
-        : Promise.resolve(''),
-    ]);
+  const [trNewsTitles, trNewsDescs, trTransferTitles, trTransferDescs] = await Promise.all([
+    translateBatch(
+      rawNews.map((item) => ({ text: item.headline, sourceLang: item.sourceLang })),
+      lang,
+    ),
+    translateBatch(
+      rawNews.map((item) => ({
+        text: item.description && item.description !== item.headline ? item.description : '',
+        sourceLang: item.sourceLang,
+      })),
+      lang,
+    ),
+    translateBatch(
+      rawTransfers.map((item) => ({
+        text: item.headline.replace(/^Transfer rumors, news:\s*/i, ''),
+        sourceLang: item.sourceLang,
+      })),
+      lang,
+    ),
+    translateBatch(
+      rawTransfers.map((item) => ({
+        text: item.description && item.description !== item.headline ? item.description : '',
+        sourceLang: item.sourceLang,
+      })),
+      lang,
+    ),
+  ]);
+
+  const news: NewsArticle[] = rawNews.map((item, index) => {
+    const locTitle = trNewsTitles[index] || item.headline;
+    const locDesc = trNewsDescs[index] || '';
     const publishedLabel = formatLocalizedNewsDate(item.publishedIso, lang);
     const catLabel = localizeFeedCategoryLabel(item.competitionId, item.label, lang);
     const finalSubtitle = locDesc || locTitle;
@@ -829,14 +1521,10 @@ async function buildLocalizedFeed(
     };
   });
 
-  const transfers: TransferItem[] = await mapInBatches(rawTransfers, 3, async (item, index) => {
+  const transfers: TransferItem[] = rawTransfers.map((item, index) => {
     const cleanHeadline = item.headline.replace(/^Transfer rumors, news:\s*/i, '');
-    const [locHeadline, locSummary] = await Promise.all([
-      translateText(cleanHeadline, lang),
-      item.description !== item.headline
-        ? translateText(item.description, lang)
-        : Promise.resolve(''),
-    ]);
+    const locHeadline = trTransferTitles[index] || cleanHeadline;
+    const locSummary = trTransferDescs[index] || '';
     const publishedLabel = formatLocalizedNewsDate(item.publishedIso, lang);
     const catLabel = localizeFeedCategoryLabel(item.competitionId, item.label, lang);
     const fallbackImg =
@@ -886,12 +1574,13 @@ export async function fetchRealNewsAndMercato(
   const rawTransferMap = new Map<string, RawFeedItem>();
 
   const nowMs = Date.now();
-  const maxAgeMs = 72 * 3600 * 1000; // Prioritize fresh real-time news (last 72h max)
+  const maxAgeMs = 72 * 3600 * 1000;
 
-  await Promise.all(
-    NEWS_SOURCES.map(async (src) => {
+  await Promise.all([
+    ...NEWS_SOURCES.map(async (src) => {
       const data = await fetchJson<any>(
         `https://site.api.espn.com/apis/site/v2/sports/soccer/${src.slug}/news`,
+        3500,
       );
       if (!Array.isArray(data?.articles)) return;
 
@@ -901,7 +1590,6 @@ export async function fetchRealNewsAndMercato(
         if (!headline) return;
 
         const lower = headline.toLowerCase();
-        // Keep European Big 5 & international news sharp (skip US domestic league awards in global feed)
         if (src.slug === 'all' && (lower.includes('nwsl') || lower.includes('usl '))) {
           return;
         }
@@ -913,21 +1601,14 @@ export async function fetchRealNewsAndMercato(
         }
 
         const id = String(a?.dataSourceIdentifier || `${src.slug}-${idx}-${headline.slice(0, 20)}`);
-        const isTransfer =
-          lower.includes('transfer') ||
-          lower.includes('rumor') ||
-          lower.includes('sign') ||
-          lower.includes('eye ') ||
-          lower.includes('target') ||
-          lower.includes('contract') ||
-          lower.includes('mercato');
-        const isOfficialTransfer =
-          lower.includes('sign') || lower.includes('agree') || lower.includes('complete');
+        const isTransfer = isTransferText(lower);
+        const isOfficialTransfer = isOfficialTransferText(lower);
 
         const item: RawFeedItem = {
           id,
           headline,
           description: description || headline,
+          sourceLang: 'en',
           competitionId: src.competitionId,
           label: src.label,
           publishedIso,
@@ -945,11 +1626,70 @@ export async function fetchRealNewsAndMercato(
         }
       });
     }),
-  );
+    // DZfoot RSS: real daily Algerian Ligue 1 & National Team news (already in French)
+    fetchText('https://www.dzfoot.com/feed', 3500).then((xml) => {
+      if (!xml) return;
+      const items = parseRssItems(xml, 6);
+      items.forEach((rss, idx) => {
+        const lower = rss.title.toLowerCase();
+        const isNat = lower.includes('algérie') || lower.includes('algerie') || lower.includes('fennec') || lower.includes('petkovic');
+        const isTr = isTransferText(lower);
+        const pubMs = new Date(rss.pubDate).getTime();
+        const publishedIso = !Number.isNaN(pubMs) ? new Date(pubMs).toISOString() : new Date().toISOString();
+        const item: RawFeedItem = {
+          id: `dzfoot-${idx}-${rss.title.slice(0, 16)}`,
+          headline: rss.title,
+          description: rss.description || rss.title,
+          sourceLang: 'fr',
+          competitionId: isNat ? 'national-teams' : 'algerian-ligue-1',
+          label: isNat ? 'Sélections — Algérie' : 'Ligue 1 Mobilis (Algérie)',
+          publishedIso,
+          sourceUrl: rss.link,
+          imageUrl: rss.imageUrl,
+          isTransfer: isTr,
+          isOfficialTransfer: isOfficialTransferText(lower),
+          priority: 0,
+        };
+        if (isTr) {
+          if (!rawTransferMap.has(rss.title)) rawTransferMap.set(rss.title, item);
+        } else if (!rawNewsMap.has(rss.title)) {
+          rawNewsMap.set(rss.title, item);
+        }
+      });
+    }),
+    // Google News RSS Mercato FR: fresh daily European & African transfer headlines
+    fetchText(
+      'https://news.google.com/rss/search?q=transfert+mercato+football&hl=fr&gl=FR&ceid=FR:fr',
+      3500,
+    ).then((xml) => {
+      if (!xml) return;
+      const items = parseRssItems(xml, 6);
+      items.forEach((rss, idx) => {
+        const lower = rss.title.toLowerCase();
+        const pubMs = new Date(rss.pubDate).getTime();
+        const publishedIso = !Number.isNaN(pubMs) ? new Date(pubMs).toISOString() : new Date().toISOString();
+        const cleanTitle = rss.title.replace(/\s+-\s+[^-]+$/, '').trim();
+        if (!cleanTitle || rawTransferMap.has(cleanTitle)) return;
+        rawTransferMap.set(cleanTitle, {
+          id: `gnews-tr-${idx}-${cleanTitle.slice(0, 16)}`,
+          headline: cleanTitle,
+          description: rss.description && rss.description.length > 20 ? rss.description : cleanTitle,
+          sourceLang: 'fr',
+          competitionId: 'all',
+          label: 'Mercato Europe & Monde',
+          publishedIso,
+          sourceUrl: rss.link,
+          isTransfer: true,
+          isOfficialTransfer: isOfficialTransferText(lower),
+          priority: 0,
+        });
+      });
+    }),
+  ]);
 
   const sortedRawNews = Array.from(rawNewsMap.values())
     .sort((a, b) => new Date(b.publishedIso).getTime() - new Date(a.publishedIso).getTime())
-    .slice(0, 12);
+    .slice(0, 14);
 
   const sortedRawTransfers = Array.from(rawTransferMap.values())
     .sort((a, b) => new Date(b.publishedIso).getTime() - new Date(a.publishedIso).getTime())

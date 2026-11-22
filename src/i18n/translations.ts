@@ -352,7 +352,7 @@ export const TRANSLATIONS: Record<AppLanguage, Translations> = {
       alertsShort: 'Alertes',
     },
     utility: {
-      leaguesBanner: 'Ligue 1 · Premier League · La Liga · Serie A · Bundesliga · Sélections',
+      leaguesBanner: 'Ligue 1 · Premier League · La Liga · Serie A · Bundesliga · Ligue 1 DZ · Sélections',
       realtime: 'Temps réel',
       refresh: 'Actualiser',
       syncing: 'Synchronisation...',
@@ -420,7 +420,7 @@ export const TRANSLATIONS: Record<AppLanguage, Translations> = {
     },
     matchesView: {
       aria: 'Scores en direct, calendrier et historique des matchs',
-      kicker: 'Données en temps réel · 5 Championnats Européens & Sélections Nationales',
+      kicker: 'Données en temps réel · 5 Championnats Européens, Ligue 1 Algérie & Sélections',
       titleHistory: 'Historique Complet des Matchs',
       titleLive: 'Scores en Direct & Calendrier',
       tabLiveUpcoming: (count) => `En Direct & À Venir (${count})`,
@@ -510,7 +510,7 @@ export const TRANSLATIONS: Record<AppLanguage, Translations> = {
       tabScorers: 'Buteurs',
       tabAssists: 'Passeurs',
       tabDecisive: 'Décisifs',
-      leadersNote: 'Statistiques individuelles disponibles pour les 5 championnats européens.',
+      leadersNote: 'Statistiques individuelles disponibles pour les 5 championnats européens et la Ligue 1 Algérie.',
       matchesPlayed: (count) => `${count} matchs`,
       goalsUnit: (count) => `${count} buts`,
       assistsUnit: (count) => `${count} p.d.`,
@@ -699,7 +699,7 @@ export const TRANSLATIONS: Record<AppLanguage, Translations> = {
       alertsShort: 'تنبيهات',
     },
     utility: {
-      leaguesBanner: 'الدوري الفرنسي · الإنجليزي · الإسباني · الإيطالي · الألماني · المنتخبات',
+      leaguesBanner: 'الدوري الفرنسي · الإنجليزي · الإسباني · الإيطالي · الألماني · الدوري الجزائري · المنتخبات',
       realtime: 'بث مباشر',
       refresh: 'تحديث',
       syncing: 'جارٍ التحديث...',
@@ -764,7 +764,7 @@ export const TRANSLATIONS: Record<AppLanguage, Translations> = {
     },
     matchesView: {
       aria: 'النتائج المباشرة، الجدول وسجل المباريات',
-      kicker: 'بيانات مباشرة لحظة بلحظة · الدوريات الأوروبية الخمسة الكبرى والمنتخبات',
+      kicker: 'بيانات مباشرة لحظة بلحظة · الدوريات الأوروبية الخمسة، الدوري الجزائري والمنتخبات',
       titleHistory: 'السجل الكامل للمباريات',
       titleLive: 'النتائج المباشرة والجدول',
       tabLiveUpcoming: (count) => `مباشر والقادمة (${count})`,
@@ -852,7 +852,7 @@ export const TRANSLATIONS: Record<AppLanguage, Translations> = {
       tabScorers: 'الهدافون',
       tabAssists: 'الصانعون',
       tabDecisive: 'المساهمات',
-      leadersNote: 'الإحصائيات الفردية متاحة للدوريات الأوروبية الخمسة الكبرى.',
+      leadersNote: 'الإحصائيات الفردية متاحة للدوريات الأوروبية الخمسة الكبرى والدوري الجزائري.',
       matchesPlayed: (count) => `${count} مباراة`,
       goalsUnit: (count) => `${count} هدف`,
       assistsUnit: (count) => `${count} تمريرة`,
@@ -1037,7 +1037,7 @@ export const TRANSLATIONS: Record<AppLanguage, Translations> = {
       alertsShort: 'Alerts',
     },
     utility: {
-      leaguesBanner: 'Ligue 1 · Premier League · La Liga · Serie A · Bundesliga · National Teams',
+      leaguesBanner: 'Ligue 1 · Premier League · La Liga · Serie A · Bundesliga · Algeria L1 · National Teams',
       realtime: 'Live',
       refresh: 'Refresh',
       syncing: 'Syncing...',
@@ -1104,7 +1104,7 @@ export const TRANSLATIONS: Record<AppLanguage, Translations> = {
     },
     matchesView: {
       aria: 'Live scores, fixtures and full match history',
-      kicker: 'Real-Time Data · Top 5 European Leagues & National Teams',
+      kicker: 'Real-Time Data · Top 5 European Leagues, Algerian Ligue 1 & National Teams',
       titleHistory: 'Complete Match History',
       titleLive: 'Live Scores & Fixtures',
       tabLiveUpcoming: (count) => `Live & Upcoming (${count})`,
@@ -1194,7 +1194,7 @@ export const TRANSLATIONS: Record<AppLanguage, Translations> = {
       tabScorers: 'Scorers',
       tabAssists: 'Assists',
       tabDecisive: 'G+A',
-      leadersNote: 'Individual statistics are available for the top 5 European leagues.',
+      leadersNote: 'Individual statistics are available for the top 5 European leagues and Algerian Ligue 1.',
       matchesPlayed: (count) => `${count} apps`,
       goalsUnit: (count) => `${count} goals`,
       assistsUnit: (count) => `${count} ast`,
@@ -1403,6 +1403,11 @@ const COMP_META_I18N: Record<
     fr: { name: 'Bundesliga', shortName: 'Bundesliga', region: 'Allemagne' },
     ar: { name: 'الدوري الألماني', shortName: 'البوندسليغا', region: 'ألمانيا' },
     en: { name: 'Bundesliga', shortName: 'Bundesliga', region: 'Germany' },
+  },
+  'algerian-ligue-1': {
+    fr: { name: 'Ligue 1 Mobilis (Algérie)', shortName: 'Ligue 1 DZ', region: 'Algérie' },
+    ar: { name: 'الرابطة المحترفة الأولى (الجزائر)', shortName: 'الدوري الجزائري', region: 'الجزائر' },
+    en: { name: 'Algerian Ligue 1', shortName: 'Algeria L1', region: 'Algeria' },
   },
   'national-teams': {
     fr: { name: 'Sélections Nationales', shortName: 'Sélections', region: 'International' },

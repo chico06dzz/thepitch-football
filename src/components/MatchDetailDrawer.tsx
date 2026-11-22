@@ -6,6 +6,7 @@ import {
   getLocalizedMatchday,
   getLocalizedStatusDetail,
 } from '../i18n/translations';
+import { fetchEspnMatchDetailsDirect } from '../services/clientFallbackService';
 import { FootballMatch, PredictionVoteCounts, SupporterComment } from '../types/football';
 import { SupporterComments } from './SupporterComments';
 import { TeamLogo } from './TeamLogo';
@@ -49,14 +50,24 @@ export const MatchDetailDrawer: React.FC<MatchDetailDrawerProps> = ({
     setLoadingDetails(true);
     const leagueParam = match.espnLeagueSlug ? `?league=${encodeURIComponent(match.espnLeagueSlug)}` : '';
     fetch(`/api/matches/${encodeURIComponent(match.id)}/details${leagueParam}`)
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (active && data?.match) {
-          setDetailedMatch(data.match);
-        }
+      .then(async (res) => {
+        if (!res.ok) return null;
+        const ct = res.headers.get('content-type') || '';
+        if (!ct.includes('application/json')) return null;
+        return res.json();
       })
-      .catch(() => {
-        // Keep base match data
+      .then(async (data) => {
+        if (!active) return;
+        if (data?.match) {
+          setDetailedMatch(data.match);
+          return;
+        }
+        const direct = await fetchEspnMatchDetailsDirect(match);
+        if (active) setDetailedMatch(direct);
+      })
+      .catch(async () => {
+        const direct = await fetchEspnMatchDetailsDirect(match);
+        if (active) setDetailedMatch(direct);
       })
       .finally(() => {
         if (active) setLoadingDetails(false);
